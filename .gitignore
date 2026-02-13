@@ -1,0 +1,7 @@
+.venv/
+.env
+*.sqlite
+__pycache__/
+*.pyc
+norwegian_data.csv
+opensky.sqlite*

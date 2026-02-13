@@ -1,0 +1,4 @@
+trino[external-authentication-token-cache]
+pandas
+python-dotenv
+airportsdata
