@@ -1,7 +1,9 @@
 .venv/
 .env
-*.sqlite
+*.sqlite*
 __pycache__/
 *.pyc
 norwegian_data.csv
 opensky.sqlite*
+*.h5
+*.DS_Store

@@ -5,4 +5,3 @@ airportsdata
 matplotlib
 scikit-learn
 xgboost
-.DS_Store
