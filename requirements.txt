@@ -2,3 +2,7 @@ trino[external-authentication-token-cache]
 pandas
 python-dotenv
 airportsdata
+matplotlib
+scikit-learn
+xgboost
+.DS_Store
