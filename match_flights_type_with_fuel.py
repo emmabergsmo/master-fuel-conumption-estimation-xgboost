@@ -12,7 +12,7 @@ This script does the same as 'match_flights_type.py' (matches flights from csv f
 DB_PATH = "opensky.sqlite"
 OPENSKY_TABLE = "norwegian_domestic_flights_2022"  
 CSV_PATH = "norwegian_data.csv"
-OUT_TABLE = "norwegian_flights_2022_with_type_fuel"
+OUT_TABLE = "norwegian_flights_2022_with_type_fuel_v2"
 
 TIME_WINDOW_SECONDS = int(1.5 * 3600)  # ±1.5 hours
 
@@ -20,15 +20,29 @@ TIME_WINDOW_SECONDS = int(1.5 * 3600)  # ±1.5 hours
 CSV_PREFIXES = ("DY", "D8")
 CALLSIGN_PREFIXES = ("NOZ", "NAX", "NSZ", "NRS")
 
+
 airports = airportsdata.load()
 
-# Build IATA -> ICAO lookup
 IATA_TO_ICAO = {}
-for icao, info in airports.items():
-    i = info.get("iata")
-    if i:
-        IATA_TO_ICAO[i.upper()] = icao
+duplicates = {}
 
+for icao, info in airports.items():
+    iata = (info.get("iata") or "").strip().upper()
+    if not iata:
+        continue
+
+    if iata in IATA_TO_ICAO and IATA_TO_ICAO[iata] != icao:
+        duplicates.setdefault(iata, []).append(icao)
+    else:
+        IATA_TO_ICAO[iata] = icao
+
+print("SVG maps to:", IATA_TO_ICAO.get("SVG"))
+print("HAU maps to:", IATA_TO_ICAO.get("HAU"))
+
+if "SVG" in duplicates:
+    print("Duplicate SVG entries:", duplicates["SVG"])
+if "HAU" in duplicates:
+    print("Duplicate HAU entries:", duplicates["HAU"])
 
 def strip_prefixes(s: str, prefixes: tuple[str, ...]) -> str:
     if s is None:
@@ -211,33 +225,51 @@ def main():
 
         best = None
         match_rule = None
+        num = row["flightnum_num"]
 
-        # Decide matching mode:
-        # If (after prefix removal) the last 4-5 chars contain letters in either the CSV flight number
-        # OR the OpenSky callsign, we fall back to airport matching.
-        use_airport_match = bool(row["flightnum_has_letters_tail"])
+        # 1) Candidates within time window
+        cand = opensky_df[
+            (opensky_df["firstseen"] >= t0 - TIME_WINDOW_SECONDS)
+            & (opensky_df["firstseen"] <= t0 + TIME_WINDOW_SECONDS)
+        ].copy()
 
-        if not use_airport_match:
-            num = row["flightnum_num"]
-            if num:
-                cand2 = cand[cand["callsign_num"] == num].copy()
-                if not cand2.empty:
-                    cand2["dt"] = (cand2["firstseen"] - t0).abs()
-                    best = cand2.sort_values("dt").iloc[0]
-                    match_rule = "digits_match"
+        if cand.empty:
+            unmatched += 1
+            continue
 
-        # Airport fallback (also used when digits match isn't possible)
-        if best is None:
-            if dep_icao and arr_icao:
-                cand3 = cand[
-                    (cand["estdepartureairport"] == dep_icao)
-                    & (cand["estarrivalairport"] == arr_icao)
-                ].copy()
-                if not cand3.empty:
-                    cand3["dt"] = (cand3["firstseen"] - t0).abs()
-                    best = cand3.sort_values("dt").iloc[0]
-                    match_rule = "dep_arr_fallback"
+         # Airports must match if available in CSV
+        if dep_icao and arr_icao:
+            cand = cand[
+                (cand["estdepartureairport"] == dep_icao) &
+                (cand["estarrivalairport"] == arr_icao)
+            ].copy()
+        elif dep_icao:
+            cand = cand[cand["estdepartureairport"] == dep_icao].copy()
+        elif arr_icao:
+            cand = cand[cand["estarrivalairport"] == arr_icao].copy()
 
+        if cand.empty:
+            unmatched += 1
+            continue
+
+        # Calculate time difference
+        cand["dt"] = (cand["firstseen"] - t0).abs()
+
+        # Flight number is only a preference, not a requirement
+        if num:
+            cand["flightnum_match"] = (cand["callsign_num"] == num).astype(int)
+            cand = cand.sort_values(["flightnum_match", "dt"], ascending=[False, True])
+
+            if cand.iloc[0]["flightnum_match"] == 1:
+                match_rule = "airports_required_digits_preferred"
+            else:
+                match_rule = "airports_required_time_only"
+        else:
+            cand = cand.sort_values("dt")
+            match_rule = "airports_required_time_only"
+
+        best = cand.iloc[0]
+                    
         if best is None:
             unmatched += 1
             continue
