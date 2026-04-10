@@ -156,6 +156,8 @@ def main():
 
         dep_icao = row["dep_icao"]
         arr_icao = row["arr_icao"]
+        num = row["flightnum_num"]  
+
 
         # 1) time window candidates
         cand = opensky_df[
@@ -167,22 +169,7 @@ def main():
             unmatched += 1
             continue
 
-        best = None
-        match_rule = None
-        num = row["flightnum_num"]
-
-        cand = opensky_df[
-            (opensky_df["firstseen"] >= t0 - TIME_WINDOW_SECONDS)
-            & (opensky_df["firstseen"] <= t0 + TIME_WINDOW_SECONDS)
-        ].copy()
-
-        if cand.empty:
-            unmatched += 1
-            continue
-
-        cand["dt"] = (cand["firstseen"] - t0).abs()
-
-        # HARD FILTER on airports if available in CSV
+        # HARD FILTER on airports
         if dep_icao:
             cand = cand[cand["estdepartureairport"] == dep_icao].copy()
 
@@ -193,21 +180,27 @@ def main():
             unmatched += 1
             continue
 
-        # Prefer matching flight number among the airport-correct candidates
+        # Calculate time diff
+        cand["dt"] = (cand["firstseen"] - t0).abs()
+
+       
         if num:
-            cand_num = cand[cand["callsign_num"] == num].copy()
-            if not cand_num.empty:
-                cand = cand_num
-                match_rule = "airport_strict_plus_digits"
+            cand["flightnum_match"] = (cand["callsign_num"] == num).astype(int)
+
+            cand = cand.sort_values(
+                ["flightnum_match", "dt"],
+                ascending=[False, True]
+            )
+
+            if cand.iloc[0]["flightnum_match"] == 1:
+                match_rule = "airports_required_digits_preferred"
             else:
-                match_rule = "airport_strict_only"
+                match_rule = "airports_required_time_only"
+        else:
+            cand = cand.sort_values("dt")
+            match_rule = "airports_required_time_only"
 
-        cand = cand.sort_values("dt")
         best = cand.iloc[0]
-
-        if best is None:
-            unmatched += 1
-            continue
 
         matches.append(
             {
