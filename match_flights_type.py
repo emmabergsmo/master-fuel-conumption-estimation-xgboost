@@ -5,7 +5,7 @@ from dateutil import parser
 import airportsdata
 
 DB_PATH = "opensky.sqlite"
-OPENSKY_TABLE = "norwegian_domestic_flights_2022"  # or norwegian_flights_2022
+OPENSKY_TABLE = "norwegian_domestic_flights_2022"  
 CSV_PATH = "norwegian_data.csv"
 OUT_TABLE = "norwegian_flights_2022_with_type"
 
@@ -91,7 +91,7 @@ def iata_to_icao(iata):
 def main():
     con = sqlite3.connect(DB_PATH)
 
-    # ---- Load OpenSky data from SQLite ----
+    # Load OpenSky data from SQLite 
     opensky_df = pd.read_sql_query(
         f"""
         SELECT
@@ -145,7 +145,7 @@ def main():
     csv_df["dep_icao"] = csv_df["dep_iata"].map(iata_to_icao)
     csv_df["arr_icao"] = csv_df["arr_iata"].map(iata_to_icao)
 
-    # ---- Matching ----
+    # Matching 
     matches = []
     unmatched = 0
 
@@ -169,7 +169,7 @@ def main():
             unmatched += 1
             continue
 
-        # HARD FILTER on airports
+        # Airports must match if available in CSV
         if dep_icao:
             cand = cand[cand["estdepartureairport"] == dep_icao].copy()
 
