@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 
 DB_PATH = "opensky.sqlite"
-TABLE = "adsb_fuel"         
-OUT_FEATURE_TABLE = "flight_phase_features"  
+TABLE = "adsb_fuel_v2"         
+OUT_FEATURE_TABLE = "flight_phase_features_v2"  
 
 # Phase IDs we model (as defined in set_flight_phases.py)
 PHASES = {

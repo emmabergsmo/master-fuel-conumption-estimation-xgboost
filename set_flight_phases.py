@@ -184,6 +184,6 @@ def write_phases_to_db(db_path: str, table: str):
 
 if __name__ == "__main__":
     DB_PATH = "opensky.sqlite"
-    TABLE = "adsb_fuel"
+    TABLE = "adsb_fuel_v2" 
     write_phases_to_db(DB_PATH, TABLE)
     print("Done: phase_id + phase_name written.")

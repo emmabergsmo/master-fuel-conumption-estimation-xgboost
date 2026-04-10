@@ -1,7 +1,7 @@
 import sqlite3
 
 DB_PATH = "opensky.sqlite"
-TABLE = "norwegian_flights_2022_points_1min"  # <-- change this if needed
+TABLE = "adsb_fuel_v2"  # <-- change this if needed
 GAP_SECONDS = 3600  # <-- change this if needed (e.g. 45*60)
 
 def ensure_column(conn):

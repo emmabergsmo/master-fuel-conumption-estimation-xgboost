@@ -7,13 +7,15 @@ sqlite3.register_adapter(Decimal, float)
 # Also, it samples more densely (every 10 seconds) during takeoff and landing phases, to better capture those critical phases.
 
 DB_PATH = "opensky.sqlite"
-FLIGHTS_TABLE = "norwegian_flights_2022_with_type_fuel"
+FLIGHTS_TABLE = "norwegian_flights_2022_with_type_fuel_v2"
 TRINO_STATE_TABLE = "state_vectors_data4" 
-OUT_TABLE = "adsb_fuel"
+OUT_TABLE = "adsb_fuel_v2"
 
+
+print("START")
 # Window
-TIME_START = 1671058800  
-TIME_END   = 1672531260
+TIME_START = 1671663600  
+TIME_END   = 1672531200
 
 # Performance knobs
 FLIGHT_CHUNK_SIZE = 50       # flights per Trino query
@@ -101,6 +103,7 @@ def chunked(seq, n):
 # Main
 def main():
     sqlite_conn = sqlite3.connect(DB_PATH)
+
     sqlite_conn.execute("PRAGMA journal_mode=WAL;")
     sqlite_conn.execute("PRAGMA synchronous=NORMAL;")
     sqlite_conn.executescript(DDL)

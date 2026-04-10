@@ -5,7 +5,7 @@ from dateutil import parser
 import airportsdata
 
 DB_PATH = "opensky.sqlite"
-OPENSKY_TABLE = "norwegian_domestic_flights_2022"  # or norwegian_flights_2022
+OPENSKY_TABLE = "norwegian_domestic_flights_2022"  
 CSV_PATH = "norwegian_data.csv"
 OUT_TABLE = "norwegian_flights_2022_with_type"
 
@@ -91,7 +91,7 @@ def iata_to_icao(iata):
 def main():
     con = sqlite3.connect(DB_PATH)
 
-    # ---- Load OpenSky data from SQLite ----
+    # Load OpenSky data from SQLite 
     opensky_df = pd.read_sql_query(
         f"""
         SELECT
@@ -125,9 +125,9 @@ def main():
     CSV_COL_TIME = "Actual departure date"
     CSV_COL_TYPE = "Aircraft type ICAO code"
 
-    # Airport columns (IATA) for fallback matching
-    CSV_COL_DEP_IATA = "Actual departure airport IATA"
+    # Airport columns (IATA) 
     CSV_COL_ARR_IATA = "Actual arrival airport IATA"
+    CSV_COL_DEP_IATA = "Actual departure airport IATA"
 
     csv_df["flightnum"] = csv_df[CSV_COL_FLTNUM].astype(str).str.strip()
     csv_df["flightnum_num"] = csv_df["flightnum"].map(
@@ -145,7 +145,7 @@ def main():
     csv_df["dep_icao"] = csv_df["dep_iata"].map(iata_to_icao)
     csv_df["arr_icao"] = csv_df["arr_iata"].map(iata_to_icao)
 
-    # ---- Matching ----
+    # Matching 
     matches = []
     unmatched = 0
 
@@ -156,6 +156,8 @@ def main():
 
         dep_icao = row["dep_icao"]
         arr_icao = row["arr_icao"]
+        num = row["flightnum_num"]  
+
 
         # 1) time window candidates
         cand = opensky_df[
@@ -167,38 +169,38 @@ def main():
             unmatched += 1
             continue
 
-        best = None
-        match_rule = None
+        # Airports must match if available in CSV
+        if dep_icao:
+            cand = cand[cand["estdepartureairport"] == dep_icao].copy()
 
-        # Decide matching mode:
-        # If (after prefix removal) the last 4-5 chars contain letters in either the CSV flight number
-        # OR the OpenSky callsign, we fall back to airport matching.
-        use_airport_match = bool(row["flightnum_has_letters_tail"])
+        if arr_icao:
+            cand = cand[cand["estarrivalairport"] == arr_icao].copy()
 
-        if not use_airport_match:
-            num = row["flightnum_num"]
-            if num:
-                cand2 = cand[cand["callsign_num"] == num].copy()
-                if not cand2.empty:
-                    cand2["dt"] = (cand2["firstseen"] - t0).abs()
-                    best = cand2.sort_values("dt").iloc[0]
-                    match_rule = "digits_match"
-
-        # Airport fallback (also used when digits match isn't possible)
-        if best is None:
-            if dep_icao and arr_icao:
-                cand3 = cand[
-                    (cand["estdepartureairport"] == dep_icao)
-                    & (cand["estarrivalairport"] == arr_icao)
-                ].copy()
-                if not cand3.empty:
-                    cand3["dt"] = (cand3["firstseen"] - t0).abs()
-                    best = cand3.sort_values("dt").iloc[0]
-                    match_rule = "dep_arr_fallback"
-
-        if best is None:
+        if cand.empty:
             unmatched += 1
             continue
+
+        # Calculate time diff
+        cand["dt"] = (cand["firstseen"] - t0).abs()
+
+       
+        if num:
+            cand["flightnum_match"] = (cand["callsign_num"] == num).astype(int)
+
+            cand = cand.sort_values(
+                ["flightnum_match", "dt"],
+                ascending=[False, True]
+            )
+
+            if cand.iloc[0]["flightnum_match"] == 1:
+                match_rule = "airports_required_digits_preferred"
+            else:
+                match_rule = "airports_required_time_only"
+        else:
+            cand = cand.sort_values("dt")
+            match_rule = "airports_required_time_only"
+
+        best = cand.iloc[0]
 
         matches.append(
             {
