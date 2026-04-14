@@ -4,6 +4,7 @@
 __pycache__/
 *.pyc
 norwegian_data.csv
+*.csv
 opensky.sqlite*
 *.h5
 *.DS_Store
