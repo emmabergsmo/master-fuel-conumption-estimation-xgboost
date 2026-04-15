@@ -2,7 +2,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-DB_PATH = "opensky.sqlite"
+DB_PATH = "../opensky.sqlite"
 TABLE = "adsb_fuel_v2"         
 OUT_FEATURE_TABLE = "flight_phase_features_v2"  
 
@@ -162,6 +162,13 @@ def aggregate_phase_features(df_flight: pd.DataFrame) -> pd.DataFrame:
             v = df_flight[c].dropna().iloc[0] if df_flight[c].notna().any() else None
             meta[c] = v
 
+    # departure/arrival time from trajectory
+    if "postime" in df_flight.columns and df_flight["postime"].notna().any():
+        meta["dep_time"] = float(df_flight["postime"].min())
+        meta["arr_time"] = float(df_flight["postime"].max())
+    else:
+        meta["dep_time"] = np.nan
+        meta["arr_time"] = np.nan
     # labels (fuel per phase) – same for whole flight, grab first non-null
     labels = {}
     for c in FUEL_COLS:

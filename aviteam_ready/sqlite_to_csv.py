@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
 
-sqlite_db_path = "opensky_updated.sqlite"
+sqlite_db_path = "../opensky_updated.sqlite"
 csv_output_path = "norwegian_fuel_v2.csv"
 
 conn = sqlite3.connect(sqlite_db_path)
