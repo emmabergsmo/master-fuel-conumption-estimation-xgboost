@@ -2,9 +2,9 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-DB_PATH = "opensky_xgboost.sqlite"
-IN_FEATURE_TABLE = "flight_phase_features"
-OUT_FEATURE_TABLE = "flight_phase_features_physics"
+DB_PATH = "../opensky.sqlite"
+IN_FEATURE_TABLE = "flight_phase_features_weather_heading_v2"
+OUT_FEATURE_TABLE = "flight_phase_features_physics_weather"
 
 PHASES = ["takeoff", "climb", "cruise", "descent", "landing"]
 G = 9.81
