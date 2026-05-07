@@ -87,8 +87,8 @@ def label_phases_one_flight(df: pd.DataFrame) -> pd.DataFrame:
     rel_arr = alt - alt_arr
 
     # thresholds 
-    TAKEOFF_MAX_REL_ALT_M = 500.0   
-    LANDING_MAX_REL_ALT_M = 900.0     
+    TAKEOFF_MAX_REL_ALT_M = 450.0   
+    LANDING_MAX_REL_ALT_M = 450.0     
 
     CLIMB_VR_MIN_MPS = 2.5            
     DESC_VR_MAX_MPS  = -2.5
