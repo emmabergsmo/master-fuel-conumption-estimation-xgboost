@@ -1,6 +1,6 @@
 import sqlite3
 
-db_path = "../opensky_updated.sqlite"
+db_path = "opensky_updated.sqlite"
 
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
