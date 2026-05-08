@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
 
-sqlite_db_path = "../opensky_updated.sqlite"
+sqlite_db_path = "opensky_updated.sqlite"
 h5_output_path = "ready_v2_phase.h5"
 
 conn = sqlite3.connect(sqlite_db_path)
