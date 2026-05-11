@@ -1,3 +1,10 @@
+"""Retrieve Norwegian Air Shuttle flights from OpenSky for 2022.
+
+This script queries the OpenSky Trino 'flights_data4' table for flights with
+Norwegian-related callsigns and stores the result in a local SQLite table for 
+later preprocessing.
+"""
+
 import json
 import sqlite3
 from trino_client import get_trino_connection
@@ -7,7 +14,15 @@ SOURCE_TABLE = "flights_data4"
 DEST_TABLE = "norwegian_flights_2022"
 
 YEAR_START = 1640995200   # 2022-01-01 00:00:00
-YEAR_END = 1672531200   # 2023-01-01 00:00:00
+YEAR_END = 1672531200     # 2023-01-01 00:00:00
+
+NORWEGIAN_CALLSIGN_PREFIXES = ("NOZ", "NSZ", "NAX", "NRS")
+
+
+callsign_filter = " OR ".join(
+    f"TRIM(callsign) LIKE '{prefix}%%'"
+    for prefix in NORWEGIAN_CALLSIGN_PREFIXES
+)
 
 DDL = f"""
 DROP TABLE IF EXISTS {DEST_TABLE};
@@ -28,7 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_{DEST_TABLE}_callsign ON {DEST_TABLE}(callsign);
 CREATE INDEX IF NOT EXISTS idx_{DEST_TABLE}_day ON {DEST_TABLE}(day);
 """
 
-# IMPORTANT: no "?" params -> avoids prepared statements / EXECUTE IMMEDIATE path
+
 SELECT_SQL = f"""
 SELECT
   day,
@@ -41,11 +56,10 @@ SELECT
 FROM {SOURCE_TABLE}
 WHERE firstseen >= {YEAR_START}
   AND firstseen < {YEAR_END}
+  AND day >= {YEAR_START}
+  AND day < {YEAR_END}
   AND (
-    TRIM(callsign) LIKE 'NOZ%%'
-    OR TRIM(callsign) LIKE 'NSZ%%'
-    OR TRIM(callsign) LIKE 'NAX%%'
-    OR TRIM(callsign) LIKE 'NRS%'
+    {callsign_filter}
   )
 """
 
@@ -55,6 +69,7 @@ INSERT OR IGNORE INTO {DEST_TABLE} VALUES (?,?,?,?,?,?,?)
 
 
 def to_sqlite_value(v):
+    """Convert Trino values to SQLite-compatible values."""
     if v is None:
         return None
     if isinstance(v, bool):
@@ -67,9 +82,11 @@ def to_sqlite_value(v):
 
 
 def main():
+    """Download Norwegian flights from Trino and write them to SQLite."""
     trino_conn = get_trino_connection()
     sqlite_conn = sqlite3.connect(DB_PATH)
 
+    # Improve SQLite write performance for large batch inserts
     sqlite_conn.execute("PRAGMA journal_mode=WAL;")
     sqlite_conn.execute("PRAGMA synchronous=NORMAL;")
     sqlite_conn.executescript(DDL)
@@ -83,6 +100,7 @@ def main():
         cur.execute(SELECT_SQL)
 
         while True:
+            # Fetch rows in chunks to avoid loading the full result set into memory
             rows = cur.fetchmany(5000)
             if not rows:
                 break
@@ -103,7 +121,7 @@ def main():
             inserted += len(buf)
 
         print(
-            f"Done. Inserted ~{inserted} rows into {DB_PATH} table {DEST_TABLE}.")
+            f"Done. Inserted {inserted} rows into {DB_PATH} table {DEST_TABLE}.")
 
     finally:
         sqlite_conn.close()

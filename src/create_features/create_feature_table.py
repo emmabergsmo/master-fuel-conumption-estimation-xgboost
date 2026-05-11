@@ -1,12 +1,19 @@
+"""Create phase-level flight feature tables from labeled ADS-B data.
+
+This script aggregates trajectory points into one row per flight. For each
+flight phase, it computes time, distance, altitude, speed, vertical rate, turn,
+and point-count features. Fuel values and flight metadata are copied into the
+same row so the output table can be used for XGBoost training.
+"""
+
 import sqlite3
 import numpy as np
 import pandas as pd
 
-DB_PATH = "../opensky.sqlite"
+DB_PATH = "opensky.sqlite"
 TABLE = "adsb_fuel_v2"         
 OUT_FEATURE_TABLE = "flight_phase_features_v2"  
 
-# Phase IDs we model (as defined in set_flight_phases.py)
 PHASES = {
     1: "takeoff",
     2: "climb",
@@ -31,7 +38,7 @@ POINT_COLS = [
 
 
 def haversine_m(lon1, lat1, lon2, lat2):
-    """Vectorized haversine distance in meters."""
+    """Calculate vectorized haversine distance in meters."""
     R = 6371000.0
     lon1 = np.radians(lon1); lat1 = np.radians(lat1)
     lon2 = np.radians(lon2); lat2 = np.radians(lat2)
@@ -42,20 +49,14 @@ def haversine_m(lon1, lat1, lon2, lat2):
 
 
 def heading_delta_deg(h1, h2):
-    """Smallest absolute heading delta in degrees (0..180), vectorized."""
+    """Calculate the smallest absolute heading difference in degrees."""
     d = (h2 - h1 + 180) % 360 - 180
     return np.abs(d)
 
 
 def compute_point_deltas(df_flight: pd.DataFrame) -> pd.DataFrame:
-    """
-    Adds per-row:
-      - dt_s: time delta to next point (seconds); last row dt_s=0
-      - dist_m: distance to next point (meters); last row dist_m=0
-      - dh_m: altitude change to next point (meters); last row dh_m=0
-      - dhead_deg: abs heading change to next point (deg); last row 0
-    Works with mixed sampling (10s + 60s) automatically.
-    """
+    """Add per-row deltas to the next trajectory point. Works with mixed
+    10-second and 60-second sampling intervals."""
     d = df_flight.sort_values("postime").reset_index(drop=True).copy()
 
     t = d["postime"].to_numpy(dtype=float)
@@ -64,18 +65,17 @@ def compute_point_deltas(df_flight: pd.DataFrame) -> pd.DataFrame:
     alt = d["geoaltitude"].to_numpy(dtype=float)
     head = d["heading"].to_numpy(dtype=float)
 
-    # next arrays (shift -1)
+    # Shift arrays to align each point with the following trajectory point
     t2 = np.roll(t, -1); lon2 = np.roll(lon, -1); lat2 = np.roll(lat, -1)
     alt2 = np.roll(alt, -1); head2 = np.roll(head, -1)
 
     dt = t2 - t
     dt[-1] = 0.0
-    # clip dt in case of duplicates or out-of-order weirdness
+    # Limit unusually large or invalid time gaps before aggregation
     dt = np.clip(dt, 0.0, 600.0)
 
     dist = haversine_m(lon, lat, lon2, lat2)
     dist[-1] = 0.0
-    # if any NaNs
     dist = np.nan_to_num(dist, nan=0.0)
 
     dh = alt2 - alt
@@ -94,28 +94,23 @@ def compute_point_deltas(df_flight: pd.DataFrame) -> pd.DataFrame:
 
 
 def aggregate_phase_features(df_flight: pd.DataFrame) -> pd.DataFrame:
-    """
-    Returns one-row dataframe for this flight_id with wide phase features + labels.
-    """
-    # ensure required columns
+    """Aggregate one flight into wide phase-level features and fuel labels."""
     missing = {"flight_id", "postime", "phase_id", "lon", "lat", "geoaltitude", "velocity", "heading", "vertrate"} - set(df_flight.columns)
     if missing:
         raise ValueError(f"Missing columns in input: {missing}")
 
-    # compute deltas
     d = compute_point_deltas(df_flight)
 
-    # keep only modeled phases; unknowns are dropped
+    # Keep only modeled flight phases; unknown points are excluded
     d = d[d["phase_id"].isin(PHASES.keys())].copy()
     if d.empty:
         return pd.DataFrame()
 
-    # helper metrics
+    # Create helper metrics used in phase aggregation
     d["alt_gain_m"] = np.clip(d["dh_m"], 0, None)
     d["alt_loss_m"] = np.clip(-d["dh_m"], 0, None)
     d["abs_vr_mps"] = np.abs(d["vertrate"].astype(float))
 
-    # aggregate per phase
     g = d.groupby("phase_id", as_index=False).agg(
         time_s=("dt_s", "sum"),
         dist_m=("dist_m", "sum"),
@@ -132,7 +127,7 @@ def aggregate_phase_features(df_flight: pd.DataFrame) -> pd.DataFrame:
         n_points=("postime", "count"),
     )
 
-     # Build wide phase features explicitly: metric_phase (e.g., time_s_takeoff)
+    # Build wide phase features: metric_phase, e.g. time_s_takeoff
     out = {}
     for _, row in g.iterrows():
         p = PHASES[int(row["phase_id"])]
@@ -143,11 +138,11 @@ def aggregate_phase_features(df_flight: pd.DataFrame) -> pd.DataFrame:
         ]:
             out[f"{metric}_{p}"] = float(row[metric]) if pd.notna(row[metric]) else np.nan
 
-    # flight-level totals (from the labeled phases only)
+    # Compute total modeled time and distance across all labeled phases
     out["time_s_modeled"] = float(d["dt_s"].sum())
     out["dist_m_modeled"] = float(d["dist_m"].sum())
 
-    # path ratio
+    # Calculate path ratio relative to great-circle distance
     gcd = df_flight["great_circle_distance"].iloc[0] if "great_circle_distance" in df_flight.columns else np.nan
     out["great_circle_distance"] = float(gcd) * 1000 if pd.notna(gcd) else np.nan
     if pd.notna(out["great_circle_distance"]) and out["great_circle_distance"] > 0:
@@ -155,21 +150,21 @@ def aggregate_phase_features(df_flight: pd.DataFrame) -> pd.DataFrame:
     else:
         out["path_ratio"] = np.nan
 
-    # metadata (take first non-null per flight)
+    # Copy flight-level metadata from the first available row
     meta = {}
     for c in META_COLS:
         if c in df_flight.columns:
             v = df_flight[c].dropna().iloc[0] if df_flight[c].notna().any() else None
             meta[c] = v
 
-    # departure/arrival time from trajectory
     if "postime" in df_flight.columns and df_flight["postime"].notna().any():
         meta["dep_time"] = float(df_flight["postime"].min())
         meta["arr_time"] = float(df_flight["postime"].max())
     else:
         meta["dep_time"] = np.nan
         meta["arr_time"] = np.nan
-    # labels (fuel per phase) – same for whole flight, grab first non-null
+    
+    # Copy fuel labels, which are constant for each flight
     labels = {}
     for c in FUEL_COLS:
         if c in df_flight.columns:
@@ -181,10 +176,9 @@ def aggregate_phase_features(df_flight: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_feature_table(db_path=DB_PATH, table=TABLE, limit_flights=None) -> pd.DataFrame:
+    """Build the complete phase-level feature table from a SQLite ADS-B table."""
     conn = sqlite3.connect(db_path)
-
     try:
-        # get flight_ids
         q = f'''
         SELECT DISTINCT flight_id
         FROM "{table}"
@@ -221,11 +215,11 @@ def build_feature_table(db_path=DB_PATH, table=TABLE, limit_flights=None) -> pd.
 
         feat_all = pd.concat(rows, ignore_index=True)
 
-        # fill missing phase metrics with 0 (common for tree models)
+        # Fill missing phase metrics with 0 because not all flights contain all phases
         phase_metric_cols = [c for c in feat_all.columns if any(c.endswith("_"+p) for p in PHASES.values())]
         feat_all[phase_metric_cols] = feat_all[phase_metric_cols].fillna(0.0)
 
-        # create total label
+        # Create total fuel label from modeled airborne phases
         if all(c in feat_all.columns for c in ["takeoff_fuel","climb_fuel","cruise_fuel","descent_fuel","landing_fuel"]):
             feat_all["total_fuel_modeled"] = feat_all[
             ["takeoff_fuel","climb_fuel","cruise_fuel","descent_fuel","landing_fuel"]
@@ -238,6 +232,7 @@ def build_feature_table(db_path=DB_PATH, table=TABLE, limit_flights=None) -> pd.
 
 
 def write_features_to_sqlite(df_features: pd.DataFrame, db_path=DB_PATH, out_table=OUT_FEATURE_TABLE):
+    """Write the generated feature table to SQLite and index it by flight ID."""
     conn = sqlite3.connect(db_path)
     try:
         df_features.to_sql(out_table, conn, if_exists="replace", index=False)
@@ -247,11 +242,15 @@ def write_features_to_sqlite(df_features: pd.DataFrame, db_path=DB_PATH, out_tab
         conn.close()
 
 
-if __name__ == "__main__":
-    df_features = build_feature_table(limit_flights=None)  
+def main():
+    """Build and write the phase-level feature table."""
+    df_features = build_feature_table(limit_flights=None)
     print("Feature table shape:", df_features.shape)
     print(df_features.head(3).T)
 
-    # write back to sqlite
     write_features_to_sqlite(df_features)
     print(f"Wrote features to table: {OUT_FEATURE_TABLE}")
+
+
+if __name__ == "__main__":
+    main()

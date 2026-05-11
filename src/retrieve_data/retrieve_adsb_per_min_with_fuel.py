@@ -1,25 +1,29 @@
+"""Retrieve ADS-B state vectors and attach recorded fuel values.
+
+This script extends the ADS-B retrieval step by joining each flight with fuel
+consumption values from the matched flight table. It samples the first and last
+two minutes of each flight at 10-second resolution and the middle of the flight
+at 60-second resolution, giving denser coverage during takeoff and landing.
+"""
+
 import sqlite3
 from trino_client import get_trino_connection
 from decimal import Decimal
+
+# Convert Decimal values from SQLite/Trino-compatible data to floats before insertion
 sqlite3.register_adapter(Decimal, float)
 
-# This script does the same as 'retrieve adsb_per_min.py' but also joins in fuel data from the flights table. 
-# Also, it samples more densely (every 10 seconds) during takeoff and landing phases, to better capture those critical phases.
-
 DB_PATH = "opensky.sqlite"
-FLIGHTS_TABLE = "norwegian_flights_2022_with_type_fuel_v2"
+IN_TABLE = "norwegian_flights_2022_with_type_fuel_v2"
 TRINO_STATE_TABLE = "state_vectors_data4" 
 OUT_TABLE = "adsb_fuel_v2"
 
+TIME_START = 1671663600  # 2022-12-21 00:00:00
+TIME_END   = 1672531200  # 2023-01-01 00:00:00
 
-print("START")
-# Window
-TIME_START = 1671663600  
-TIME_END   = 1672531200
+FLIGHT_CHUNK_SIZE = 50       
+COMMIT_EVERY_CHUNKS = 10     
 
-# Performance knobs
-FLIGHT_CHUNK_SIZE = 50       # flights per Trino query
-COMMIT_EVERY_CHUNKS = 10     # commit every N chunks
 
 DDL = f"""
 CREATE TABLE IF NOT EXISTS {OUT_TABLE} (
@@ -54,22 +58,16 @@ CREATE TABLE IF NOT EXISTS {OUT_TABLE} (
 INSERT_SQL = f"""
 INSERT OR IGNORE INTO {OUT_TABLE} (
   icao24, estdepartureairport, estarrivalairport, callsign, aircraft_type_icao_code,
-  lon, lat, postime, baroaltitude, geoaltitude, velocity, heading, vertrate, squawk, block_fuel,
-  taxi_out_fuel,
-  takeoff_fuel,
-  climb_fuel,
-  cruise_fuel,
-  descent_fuel,
-  landing_fuel,
-  taxi_in_fuel,
-  great_circle_distance
+  lon, lat, postime, baroaltitude, geoaltitude, velocity, heading, vertrate, squawk, 
+  block_fuel, taxi_out_fuel, takeoff_fuel, climb_fuel, cruise_fuel, descent_fuel, 
+  landing_fuel, taxi_in_fuel, great_circle_distance
 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 """
 
 
-# Helpers
+
 def trino_sql_literal(v) -> str:
-    """Safe Trino SQL literal (avoids prepared statements)."""
+    """Return a SQL-safe literal value for use in Trino VALUES clauses."""
     if v is None:
         return "NULL"
     if isinstance(v, bool):
@@ -81,7 +79,7 @@ def trino_sql_literal(v) -> str:
 
 
 def hour_floor(ts: int) -> int:
-    """Your dataset's 'hour' is a unix timestamp rounded down to the hour start."""
+    """Round a Unix timestamp down to the start of its hour."""
     return ts - (ts % 3600)
 
 
@@ -90,6 +88,7 @@ GLOBAL_END_H   = hour_floor(TIME_END)
 
 
 def chunked(seq, n):
+    """Yield successive chunks of size 'n' from a sequence."""
     buf = []
     for x in seq:
         buf.append(x)
@@ -100,10 +99,11 @@ def chunked(seq, n):
         yield buf
 
 
-# Main
 def main():
+    """Retrieve ADS-B observations with fuel labels and store them in SQLite."""
     sqlite_conn = sqlite3.connect(DB_PATH)
 
+    # Improve SQLite write performance for large batch inserts
     sqlite_conn.execute("PRAGMA journal_mode=WAL;")
     sqlite_conn.execute("PRAGMA synchronous=NORMAL;")
     sqlite_conn.executescript(DDL)
@@ -114,7 +114,6 @@ def main():
     trino_conn = get_trino_connection()
     trino_cur = trino_conn.cursor()
 
-    # Overlap filter: include any flight that overlaps the window
     flights = list(read_cur.execute(
         f"""
         SELECT
@@ -134,7 +133,7 @@ def main():
           landing_fuel,
           taxi_in_fuel,
           great_circle_distance
-        FROM {FLIGHTS_TABLE}
+        FROM {IN_TABLE}
         WHERE icao24 IS NOT NULL
           AND firstseen IS NOT NULL
           AND lastseen IS NOT NULL
@@ -149,9 +148,8 @@ def main():
 
     try:
         for flight_chunk in chunked(flights, FLIGHT_CHUNK_SIZE):
+            # Build a temporary VALUES table for this chunk of flights in the Trino query
             values_rows = []
-
-           
 
             for (
                 icao24, dep, arr, callsign, ac_type,firstseen, lastseen,
@@ -159,19 +157,15 @@ def main():
                 cruise_fuel, descent_fuel, landing_fuel, taxi_in_fuel,
                 gcd,
             ) in flight_chunk:
-
-
-                
                 firstseen = int(firstseen)
                 lastseen = int(lastseen)
 
-                # Clamp flight interval to the window
+                # Clip each flight to the selected time window
                 start_t = max(firstseen, TIME_START)
                 end_t = min(lastseen, TIME_END)
                 if start_t >= end_t:
                     continue
 
-                # IMPORTANT: hour is unix timestamp floored to the hour
                 start_h = hour_floor(start_t)
                 end_h = hour_floor(end_t)
 
@@ -212,7 +206,7 @@ def main():
             ),
 
             -- =========================
-            -- 1) 10-seconds sampling for takeoff and landing phases (edges of the flight)
+            -- 1) 10-seconds sampling for takeoff and landing phases
             -- =========================
             dense AS (
                 SELECT
@@ -262,7 +256,7 @@ def main():
             ),
 
             -- =========================
-            -- 2) 60-seconds sampling (mid)
+            -- 2) 60-seconds sampling 
             -- =========================
             coarse AS (
                 SELECT
@@ -315,7 +309,6 @@ def main():
             ORDER BY icao24, postime
             """
 
-
             trino_cur.execute(trino_sql)
             rows = trino_cur.fetchall()
 
@@ -330,8 +323,7 @@ def main():
             print(f"Chunks processed: {chunk_count} | Points inserted: {total_points}")
 
         sqlite_conn.commit()
-
-        # Build indexes AFTER inserts (much faster)
+        # Create indexes to speed up later joins, filtering, and lookups
         write_cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_icao24 ON {OUT_TABLE}(icao24);")
         write_cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_postime ON {OUT_TABLE}(postime);")
         write_cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_icao24_postime ON {OUT_TABLE}(icao24, postime);")

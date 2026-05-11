@@ -1,16 +1,23 @@
+"""Retrieve weather observations for flight departure and arrival airports.
+
+This script uses the MET Norway Frost API to find nearby weather stations for
+each flight airport and retrieve temperature, wind speed, and wind direction
+observations around departure and arrival times. Results are written to a raw
+weather observation table in SQLite for later feature creation.
+"""
+
 import math
 import sqlite3
-
 import airportsdata
 import pandas as pd
 import requests
 
-FROST_CLIENT_ID = "a17ba72e-e1a1-4f5a-85d5-50403d7814fe"
+FROST_CLIENT_ID = "your_frost_client_id_here"  # Set this to your Frost API client ID before running
 
 BASE_URL = "https://frost.met.no"
 
 DB_PATH = "opensky.sqlite"
-FLIGHT_TABLE = "flight_phase_features_v2"
+IN_TABLE = "flight_phase_features_v2"
 OUT_RAW_WEATHER_TABLE = "flight_weather_observations_v2"
 
 REQUESTED_ELEMENTS = [
@@ -21,11 +28,13 @@ REQUESTED_ELEMENTS = [
 
 MAX_CANDIDATES = 5
 
+
 if not FROST_CLIENT_ID:
     raise ValueError("Set FROST_CLIENT_ID first.")
 
 airports = airportsdata.load("ICAO")
 
+# In-memory caches to reduce repeated Frost API requests
 candidate_station_cache = {}
 available_elements_cache = {}
 observation_cache = {}
@@ -37,6 +46,7 @@ EMPTY_OBS_DF = pd.DataFrame(
 
 
 def get_airport_coords(icao):
+    """Return latitude and longitude for an ICAO airport code."""
     airport = airports.get(icao)
     if airport is None:
         return None, None
@@ -44,6 +54,7 @@ def get_airport_coords(icao):
 
 
 def haversine_km(lat1, lon1, lat2, lon2):
+    """Calculate the great-circle distance between two coordinates in kilometers."""
     radius_km = 6371.0
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
@@ -58,6 +69,7 @@ def haversine_km(lat1, lon1, lat2, lon2):
 
 
 def frost_get(endpoint, params=None):
+    """Send a GET request to the Frost API and return the JSON response."""
     url = f"{BASE_URL}{endpoint}"
     response = requests.get(url, params=params, auth=(FROST_CLIENT_ID, ""))
 
@@ -71,6 +83,7 @@ def frost_get(endpoint, params=None):
 
 
 def find_candidate_stations(lat, lon, max_candidates=MAX_CANDIDATES):
+    """Find nearby Frost weather stations for a coordinate pair."""
     params = {
         "types": "SensorSystem",
         "geometry": f"nearest(POINT({lon} {lat}))",
@@ -100,6 +113,7 @@ def find_candidate_stations(lat, lon, max_candidates=MAX_CANDIDATES):
 
 
 def get_cached_candidate_stations(icao, lat, lon, max_candidates=MAX_CANDIDATES):
+    """Return cached nearby weather stations for an airport."""
     cache_key = (icao, max_candidates)
     if cache_key not in candidate_station_cache:
         candidate_station_cache[cache_key] = find_candidate_stations(
@@ -111,6 +125,7 @@ def get_cached_candidate_stations(icao, lat, lon, max_candidates=MAX_CANDIDATES)
 
 
 def get_available_elements(source_id, start, end):
+    """Return weather elements available from a station in a time interval."""
     params = {
         "sources": source_id,
         "referencetime": f"{start.isoformat()}/{end.isoformat()}",
@@ -139,6 +154,7 @@ def get_available_elements(source_id, start, end):
 
 
 def get_cached_available_elements(source_id, start, end):
+    """Return cached available weather elements for a station and month."""
     start = pd.Timestamp(start)
     cache_key = (source_id, start.strftime("%Y-%m"))
 
@@ -157,6 +173,7 @@ def find_best_station_for_elements(
     requested_elements,
     max_candidates=MAX_CANDIDATES,
 ):
+    """Choose the nearest station that provides the requested weather elements."""
     month_key = pd.Timestamp(start).strftime("%Y-%m")
     cache_key = (icao, month_key, tuple(requested_elements), max_candidates)
 
@@ -207,6 +224,7 @@ def find_best_station_for_elements(
 
 
 def fetch_observations(source_id, start, end, elements):
+    """Fetch weather observations for selected elements from a Frost station."""
     if not elements:
         return EMPTY_OBS_DF.copy()
 
@@ -256,11 +274,13 @@ def fetch_observations(source_id, start, end, elements):
 
 
 def fetch_observations_cached(source_id, start, end, elements):
+    """Fetch observations using an hourly cache to reduce repeated API calls."""
     if not elements:
         return EMPTY_OBS_DF.copy()
 
     start = pd.Timestamp(start)
     end = pd.Timestamp(end)
+    # Cache observations on hourly windows to maximize API reuse between flights
     rounded_start = start.floor("1h")
     rounded_end = end.ceil("1h")
 
@@ -288,6 +308,7 @@ def fetch_observations_cached(source_id, start, end, elements):
 
 
 def empty_weather_row(row, prefix, error):
+    """Create an empty weather result row with an error message."""
     return {
         "flight_id": row["flight_id"],
         "airport_phase": prefix,
@@ -308,6 +329,7 @@ def empty_weather_row(row, prefix, error):
 
 
 def observation_rows_for_airport(row, prefix, airport_icao, lat, lon, event_time):
+    """Retrieve weather observation rows for one airport event."""
     event_time = pd.to_datetime(event_time, unit="s", utc=True, errors="coerce")
     if pd.isna(event_time):
         return [empty_weather_row(row, prefix, "Missing event time")]
@@ -387,6 +409,7 @@ def observation_rows_for_airport(row, prefix, airport_icao, lat, lon, event_time
 
 
 def retrieve_weather_for_flight(row):
+    """Retrieve departure and arrival weather observations for one flight."""
     dep_lat, dep_lon = get_airport_coords(row["dep_airport"])
     arr_lat, arr_lon = get_airport_coords(row["arr_airport"])
 
@@ -421,11 +444,13 @@ def retrieve_weather_for_flight(row):
 
 
 def chunk_list(values, batch_size):
+    """Yield batches from a list."""
     for i in range(0, len(values), batch_size):
         yield values[i : i + batch_size]
 
 
 def process_batch(batch_ids):
+    """Retrieve weather observations for a batch of flight IDs."""
     conn = sqlite3.connect(DB_PATH)
     placeholders = ",".join(["?"] * len(batch_ids))
     query = f"""
@@ -435,7 +460,7 @@ def process_batch(batch_ids):
         estarrivalairport AS arr_airport,
         dep_time,
         arr_time
-    FROM "{FLIGHT_TABLE}"
+    FROM "{IN_TABLE}"
     WHERE flight_id IN ({placeholders})
     """
     flights = pd.read_sql_query(query, conn, params=batch_ids)
@@ -453,6 +478,7 @@ def process_batch(batch_ids):
 
 
 def get_flight_ids_to_process(rebuild_raw_table=False):
+    """Return flight IDs that still need weather observations."""
     conn = sqlite3.connect(DB_PATH)
 
     if rebuild_raw_table:
@@ -473,7 +499,7 @@ def get_flight_ids_to_process(rebuild_raw_table=False):
     if raw_table_exists.empty:
         query = f"""
         SELECT flight_id
-        FROM "{FLIGHT_TABLE}"
+        FROM "{IN_TABLE}"
         WHERE estdepartureairport IS NOT NULL
           AND estarrivalairport IS NOT NULL
           AND dep_time IS NOT NULL
@@ -482,7 +508,7 @@ def get_flight_ids_to_process(rebuild_raw_table=False):
     else:
         query = f"""
         SELECT f.flight_id
-        FROM "{FLIGHT_TABLE}" f
+        FROM "{IN_TABLE}" f
         LEFT JOIN (
             SELECT DISTINCT flight_id
             FROM "{OUT_RAW_WEATHER_TABLE}"
@@ -501,6 +527,7 @@ def get_flight_ids_to_process(rebuild_raw_table=False):
 
 
 def main(batch_size=20, rebuild_raw_table=False):
+    """Retrieve weather observations in batches and write them to SQLite."""
     flight_ids, first_write = get_flight_ids_to_process(rebuild_raw_table)
     print("Flights to process:", len(flight_ids))
 

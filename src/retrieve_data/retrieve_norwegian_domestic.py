@@ -1,3 +1,11 @@
+"""Retrieve domestic Norwegian Air Shuttle flights from OpenSky for 2022.
+
+This script queries the OpenSky Trino 'flights_data4' table and selects Norwegian 
+Air Shuttle flights where both departure and arrival airports are Norwegian 
+ICAO airports, identified by the 'EN' prefix. The resulting flight metadata 
+and track data are written to a local SQLite table for later preprocessing.
+"""
+
 import json
 import sqlite3
 from trino_client import get_trino_connection
@@ -8,6 +16,14 @@ DEST_TABLE = "norwegian_domestic_flights_2022"
 
 YEAR_START = 1640995200   # 2022-01-01 00:00:00
 YEAR_END = 1672531200     # 2023-01-01 00:00:00
+
+NORWEGIAN_CALLSIGN_PREFIXES = ("NOZ", "NSZ", "NAX", "NRS")
+
+
+callsign_filter = " OR ".join(
+    f"TRIM(callsign) LIKE '{prefix}%%'"
+    for prefix in NORWEGIAN_CALLSIGN_PREFIXES
+)
 
 DDL = f"""
 DROP TABLE IF EXISTS {DEST_TABLE};
@@ -31,8 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_{DEST_TABLE}_dep ON {DEST_TABLE}(estdepartureairp
 CREATE INDEX IF NOT EXISTS idx_{DEST_TABLE}_arr ON {DEST_TABLE}(estarrivalairport);
 """
 
-# IMPORTANT: no "?" params -> avoids prepared statements / EXECUTE IMMEDIATE path
-# Domestic Norway filter: EN* -> EN*
+
 SELECT_SQL = f"""
 SELECT
   day,
@@ -46,15 +61,14 @@ SELECT
 FROM {SOURCE_TABLE}
 WHERE firstseen >= {YEAR_START}
   AND firstseen < {YEAR_END}
+  AND day >= {YEAR_START}
+  AND day < {YEAR_END}
   AND estdepartureairport IS NOT NULL
   AND estarrivalairport IS NOT NULL
   AND estdepartureairport LIKE 'EN%%'
   AND estarrivalairport LIKE 'EN%%'
   AND (
-    TRIM(callsign) LIKE 'NOZ%%'
-    OR TRIM(callsign) LIKE 'NSZ%%'
-    OR TRIM(callsign) LIKE 'NAX%%'
-    OR TRIM(callsign) LIKE 'NRS%%'
+    {callsign_filter}
   )
 """
 
@@ -64,6 +78,7 @@ INSERT OR IGNORE INTO {DEST_TABLE} VALUES (?,?,?,?,?,?,?,?)
 
 
 def to_sqlite_value(v):
+    """Convert Trino values to SQLite-compatible values."""
     if v is None:
         return None
     if isinstance(v, bool):
@@ -76,9 +91,11 @@ def to_sqlite_value(v):
 
 
 def main():
+    """Download domestic Norwegian flights from Trino and write them to SQLite."""
     trino_conn = get_trino_connection()
     sqlite_conn = sqlite3.connect(DB_PATH)
 
+    # Improve SQLite write performance for large batch inserts
     sqlite_conn.execute("PRAGMA journal_mode=WAL;")
     sqlite_conn.execute("PRAGMA synchronous=NORMAL;")
     sqlite_conn.executescript(DDL)
@@ -92,6 +109,7 @@ def main():
         cur.execute(SELECT_SQL)
 
         while True:
+            # Fetch rows in chunks to avoid loading the full result set into memory
             rows = cur.fetchmany(5000)
             if not rows:
                 break
@@ -112,7 +130,7 @@ def main():
             inserted += len(buf)
 
         print(
-            f"Done. Inserted ~{inserted} rows into {DB_PATH} table {DEST_TABLE}.")
+            f"Done. Inserted {inserted} rows into {DB_PATH} table {DEST_TABLE}.")
 
     finally:
         sqlite_conn.close()

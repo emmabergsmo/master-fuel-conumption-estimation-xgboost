@@ -1,11 +1,19 @@
+"""Create heading and wind-component features for flight phases.
+
+This script computes circular mean and final heading values for each flight
+phase from raw ADS-B trajectory data. It then merges these heading features
+with the existing feature table and derives departure and arrival headwind and
+crosswind components using weather wind observations.
+"""
+
 import sqlite3
 import numpy as np
 import pandas as pd
 
-DB_PATH = "../opensky.sqlite"
-RAW_TABLE = "adsb_fuel_v2"
-BASE_TABLE = "flight_phase_features_weather_heading_v2"
-OUT_TABLE = "flight_phase_features_weather_heading_v3"
+DB_PATH = "opensky.sqlite"
+TABLE = "adsb_fuel_v2"
+IN_FEATURE_TABLE = "flight_phase_features_weather_heading_v2"
+OUT_FEATURE_TABLE = "flight_phase_features_weather_heading_v3"
 
 PHASES = {
     1: "takeoff",
@@ -17,10 +25,11 @@ PHASES = {
 
 
 def circular_mean_deg(series: pd.Series) -> float:
+    """Calculate the circular mean of heading angles in degrees."""
     s = pd.to_numeric(series, errors="coerce").dropna()
     if s.empty:
         return np.nan
-
+    # Use circular statistics so headings near 0°/360° are averaged correctly
     radians = np.radians(s.to_numpy(dtype=float))
     mean_sin = np.mean(np.sin(radians))
     mean_cos = np.mean(np.cos(radians))
@@ -29,9 +38,9 @@ def circular_mean_deg(series: pd.Series) -> float:
     return float(angle % 360)
 
 
-def build_heading_features(db_path=DB_PATH, raw_table=RAW_TABLE, limit_flights=None):
+def build_heading_features(db_path=DB_PATH, raw_table=TABLE, limit_flights=None):
+    """Build phase-level mean and last-heading features for each flight."""
     conn = sqlite3.connect(db_path)
-
     try:
         q = f'''
         SELECT DISTINCT flight_id
@@ -61,6 +70,7 @@ def build_heading_features(db_path=DB_PATH, raw_table=RAW_TABLE, limit_flights=N
 
             row = {"flight_id": fid}
 
+            # Build heading features separately for each labeled flight phase
             for phase_id, phase_name in PHASES.items():
                 phase_df = df[df["phase_id"] == phase_id].copy()
 
@@ -84,6 +94,7 @@ def build_heading_features(db_path=DB_PATH, raw_table=RAW_TABLE, limit_flights=N
 
 
 def add_wind_components(df, prefix, heading_col):
+    """Calculate headwind and crosswind components relative to a heading column."""
     wind_speed_col = f"{prefix}_wind_speed_mean"
     wind_dir_col = f"{prefix}_wind_dir_last"
 
@@ -91,14 +102,17 @@ def add_wind_components(df, prefix, heading_col):
     if not all(c in df.columns for c in required):
         return df
 
+    # Convert wind direction relative to flight heading before decomposing wind
     rel = np.radians(df[wind_dir_col] - df[heading_col])
 
+    # Headwind is positive for wind opposing the aircraft direction
     df[f"{prefix}_headwind"] = -df[wind_speed_col] * np.cos(rel)
     df[f"{prefix}_crosswind"] = np.abs(df[wind_speed_col] * np.sin(rel))
     return df
 
 
 def main(limit_flights=None):
+    """Merge heading and wind-component features into the feature table."""
     print("Building heading features...")
     heading_df = build_heading_features(limit_flights=limit_flights)
     print("Heading feature shape:", heading_df.shape)
@@ -106,7 +120,7 @@ def main(limit_flights=None):
     conn = sqlite3.connect(DB_PATH)
 
     print("Reading base table...")
-    base_df = pd.read_sql_query(f'SELECT * FROM "{BASE_TABLE}"', conn)
+    base_df = pd.read_sql_query(f'SELECT * FROM "{IN_FEATURE_TABLE}"', conn)
     print("Base shape:", base_df.shape)
 
     print("Merging heading features...")
@@ -136,11 +150,11 @@ def main(limit_flights=None):
     print("\nExample:")
     print(merged_df[sample_cols].head())
 
-    merged_df.to_sql(OUT_TABLE, conn, if_exists="replace", index=False)
+    merged_df.to_sql(OUT_FEATURE_TABLE, conn, if_exists="replace", index=False)
     conn.close()
 
-    print(f"\nWrote table: {OUT_TABLE}")
+    print(f"\nWrote table: {OUT_FEATURE_TABLE}")
 
 
 if __name__ == "__main__":
-    main(limit_flights=None)
+    main()

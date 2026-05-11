@@ -1,10 +1,17 @@
+"""Assign AviTEAM-compatible flight phase labels to trajectory points.
+
+This script labels each ADS-B trajectory point with a flight phase using
+heuristics based on geometric altitude, ground speed, and vertical rate.
+The labels are intended for the AviTEAM-ready dataset and distinguish
+takeoff, climb, cruise, descent, landing, and unknown phases.
+"""
+
 import sqlite3
 import numpy as np
 import pandas as pd
 
-"""
-This script labels each ADS-B point with a flight phase (takeoff, climb, cruise, descent, landing, unknown) based on heuristics using altitude, vertical rate, and ground speed. The resulting phase_id and phase_name are written back to the same table in the SQLite database.
-"""
+DB_PATH = "opensky.sqlite"
+TABLE = "adsb_fuel_v2" 
 
 PHASE_NAMES = {
     1: "takeoff",
@@ -16,6 +23,7 @@ PHASE_NAMES = {
 }
 
 def ensure_columns(conn: sqlite3.Connection, table: str):
+    """Add phase label columns to the SQLite table if they do not exist."""
     cols = pd.read_sql(f'PRAGMA table_info("{table}")', conn)["name"].tolist()
     if "phase_id" not in cols:
         conn.execute(f'ALTER TABLE "{table}" ADD COLUMN phase_id INTEGER')
@@ -24,6 +32,7 @@ def ensure_columns(conn: sqlite3.Connection, table: str):
     conn.commit()
 
 def majority_filter(phases: np.ndarray, window: int = 5) -> np.ndarray:
+    """Smooth phase labels using a centered rolling majority filter."""
     s = pd.Series(phases)
     def mode_or_center(x):
         vc = x.value_counts()
@@ -41,6 +50,7 @@ def majority_filter(phases: np.ndarray, window: int = 5) -> np.ndarray:
     )
 
 def enforce_min_dwell(phases: np.ndarray, min_dwell: int = 2) -> np.ndarray:
+    """Replace phase segments shorter than `min_dwell` with a neighboring phase."""
     phases = phases.copy()
     n = len(phases)
     i = 0
@@ -64,6 +74,7 @@ def enforce_min_dwell(phases: np.ndarray, min_dwell: int = 2) -> np.ndarray:
     return phases
 
 def label_phases_one_flight(df: pd.DataFrame) -> pd.DataFrame:
+    """Assign numeric flight phase labels to one ordered flight trajectory."""
     d = df.sort_values("postime").reset_index().copy()
     original_index_col = "index"
 
@@ -128,6 +139,7 @@ def label_phases_one_flight(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 def write_phases_to_db(db_path: str, table: str):
+    """Compute phase labels for each flight and write them back to SQLite."""
     conn = sqlite3.connect(db_path)
     try:
         ensure_columns(conn, table)
@@ -166,8 +178,10 @@ def write_phases_to_db(db_path: str, table: str):
     finally:
         conn.close()
 
-if __name__ == "__main__":
-    DB_PATH = "opensky.sqlite"
-    TABLE = "adsb_fuel_v2" 
+def main():
+    """Assign flight phases and write them to SQLite."""
     write_phases_to_db(DB_PATH, TABLE)
     print("Done: phase_id + phase_name written.")
+
+if __name__ == "__main__":
+    main()
