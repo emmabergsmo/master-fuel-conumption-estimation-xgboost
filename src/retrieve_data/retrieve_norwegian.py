@@ -56,6 +56,8 @@ SELECT
 FROM {SOURCE_TABLE}
 WHERE firstseen >= {YEAR_START}
   AND firstseen < {YEAR_END}
+  AND day >= {YEAR_START}
+  AND day < {YEAR_END}
   AND (
     {callsign_filter}
   )

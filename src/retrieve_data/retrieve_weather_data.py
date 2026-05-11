@@ -12,7 +12,7 @@ import airportsdata
 import pandas as pd
 import requests
 
-FROST_CLIENT_ID = "a17ba72e-e1a1-4f5a-85d5-50403d7814fe"
+FROST_CLIENT_ID = "your_frost_client_id_here"  # Set this to your Frost API client ID before running
 
 BASE_URL = "https://frost.met.no"
 

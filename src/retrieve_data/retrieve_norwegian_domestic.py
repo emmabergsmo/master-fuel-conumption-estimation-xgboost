@@ -61,6 +61,8 @@ SELECT
 FROM {SOURCE_TABLE}
 WHERE firstseen >= {YEAR_START}
   AND firstseen < {YEAR_END}
+  AND day >= {YEAR_START}
+  AND day < {YEAR_END}
   AND estdepartureairport IS NOT NULL
   AND estarrivalairport IS NOT NULL
   AND estdepartureairport LIKE 'EN%%'

@@ -36,12 +36,12 @@ Fuel_estimation_machine_learning/
 ├── requirements.txt
 ├── setup.sh
 ├── .gitignore
-├── trino_client.py
 ├── norwegian_data.csv  # Not tracked in Git
 ├── datatables.sqlite   # Not tracked in Git
 │
 ├── src/
 │ ├── data_retreival/
+│ │ ├── trino_client.py
 │ │ ├── retrieve_adsb_data.py
 │ │ ├── retrieve_norwegian.py
 │ │ ├── retrieve_norwegian_domestic.py
@@ -132,6 +132,12 @@ AviTEAM:
 chmod +x setup.sh
 ./setup.sh
 ```
+
+Must create an .env file to connect to Trino database, which includes:
+```text
+OPENSKY_USER={username}
+```
+
 
 ## How to Run Files
 
