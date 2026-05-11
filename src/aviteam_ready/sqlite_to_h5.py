@@ -1,39 +1,56 @@
+"""Export AviTEAM-ready flight data from SQLite to HDF5.
+
+This script reads the AviTEAM-ready SQLite table and writes one HDF5 dataset
+per aircraft hex code. The resulting HDF5 file can be used as input for
+AviTEAM or downstream AviTEAM comparison workflows.
+"""
+
 import sqlite3
 import pandas as pd
 
-sqlite_db_path = "opensky_updated.sqlite"
-h5_output_path = "ready_v2_phase.h5"
+DB_PATH = "opensky_updated.sqlite"
+TABLE = "aviteam_ready_phase"
+H5_OUTPUT_PATH = "ready_v2_phase.h5"
 
-conn = sqlite3.connect(sqlite_db_path)
 
-# Finn alle unike hex-koder
-hex_codes = pd.read_sql_query(
-    "SELECT DISTINCT hex FROM aviteam_ready_phase;",
-    conn
-)["hex"].tolist()
+def main():
+    """Export AviTEAM-ready flight data grouped by aircraft hex code."""
+    conn = sqlite3.connect(DB_PATH)
 
-print(f"Found {len(hex_codes)} hex-codes")
+    hex_codes = pd.read_sql_query(
+        f"SELECT DISTINCT hex FROM {TABLE};",
+        conn
+    )["hex"].tolist()
 
-with pd.HDFStore(h5_output_path, mode='w', complevel=9, complib='blosc') as store:
+    print(f"Found {len(hex_codes)} hex-codes")
 
-    for hex_code in hex_codes:
-        print(f"Lagrer {hex_code}...")
+    with pd.HDFStore(
+        H5_OUTPUT_PATH, 
+        mode='w', 
+        complevel=9, 
+        complib='blosc'
+    ) as store:
 
-        df = pd.read_sql_query(
-            f"""
-            SELECT *
-            FROM aviteam_ready_phase
-            WHERE hex = '{hex_code}';
-            """,
-            conn
-        )
+        for hex_code in hex_codes:
+            print(f"Saving {hex_code}...")
 
-        store.put(
-            f"ready_{hex_code}",
-            df,
-            format="table"
-        )
+            df = pd.read_sql_query(
+                f"""
+                SELECT *
+                FROM {TABLE}
+                WHERE hex = '{hex_code}';
+                """,
+                conn
+            )
 
-conn.close()
+            store.put(
+                f"ready_{hex_code}",
+                df,
+                format="table"
+            )
 
-print("ready_v2_phase.h5 created with all keys.")
+    conn.close()
+    print("H5 export complete.")
+
+if __name__ == "__main__":
+    main()

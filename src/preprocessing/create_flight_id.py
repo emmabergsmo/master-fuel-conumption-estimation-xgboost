@@ -1,10 +1,21 @@
+"""Create unique flight identifiers for ADS-B trajectory segments.
+
+This script adds a 'flight_id' column to an ADS-B SQLite table and assigns
+one identifier per continuous flight segment. Segments are separated by large
+time gaps within each '(icao24, callsign)' group. The generated identifier
+uses the aircraft ICAO24, callsign, and first timestamp of the segment.
+"""
+
 import sqlite3
 
 DB_PATH = "opensky.sqlite"
-TABLE = "adsb_fuel_v2"  # <-- change this if needed
-GAP_SECONDS = 3600  # <-- change this if needed (e.g. 45*60)
+TABLE = "adsb_fuel_v2"  
+
+GAP_SECONDS = 3600  
+
 
 def ensure_column(conn):
+    """Add the 'flight_id' column to the ADS-B table if it does not exist."""
     cur = conn.cursor()
     cols = [r[1] for r in cur.execute(f"PRAGMA table_info({TABLE})").fetchall()]
     if "flight_id" not in cols:
@@ -12,19 +23,22 @@ def ensure_column(conn):
         conn.commit()
 
 def main():
+    """Assign flight IDs to continuous ADS-B segments and index the result."""
     conn = sqlite3.connect(DB_PATH)
+
+    # Improve SQLite write performance for large batch inserts
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
 
     ensure_column(conn)
     cur = conn.cursor()
 
-    # This:
-    # 1) orders points per (icao24,callsign)
-    # 2) flags a new flight when gap > GAP_SECONDS (or first row)
-    # 3) creates a running flight_seq number per (icao24,callsign)
-    # 4) finds first_postime per (icao24,callsign,flight_seq)
-    # 5) updates every row with: icao24-callsign-mm-dd-hh-mm using first_postime
+    # 1) Order ADS-B points within each (icao24, callsign) group
+    # 2) Mark a new flight when the time gap exceeds GAP_SECONDS
+    # 3) Create a cumulative flight sequence number per aircraft/callsign
+    # 4) Find the first timestamp for each detected flight segment
+    # 5) Generate and assign a unique flight_id for every row
+
     sql = f"""
     WITH ordered AS (
       SELECT
@@ -98,8 +112,7 @@ def main():
 
     cur.executescript(sql)
     conn.commit()
-
-    # Optional: index for speed later
+    # Create index to speed up later joins, filtering, and lookups
     cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_flight_id ON {TABLE}(flight_id);")
     conn.commit()
 

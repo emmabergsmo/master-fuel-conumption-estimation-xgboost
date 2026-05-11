@@ -1,7 +1,7 @@
 trino[external-authentication-token-cache]
-pandas
+pandas==2.3.3
 python-dotenv
 airportsdata
 matplotlib
 scikit-learn
-xgboost
+xgboost==3.2.0

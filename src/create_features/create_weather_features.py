@@ -1,16 +1,24 @@
-import sqlite3
+"""Create weather features from raw MET Frost observations.
 
+This script aggregates raw departure and arrival weather observations into
+flight-level features. It computes temperature and wind summaries, station
+metadata, missing-data indicators, and cyclical wind-direction features, then
+merges the weather features with the phase-level flight feature table.
+"""
+
+import sqlite3
 import numpy as np
 import pandas as pd
 
 DB_PATH = "opensky.sqlite"
-FLIGHT_TABLE = "flight_phase_features_v2"
-RAW_WEATHER_TABLE = "flight_weather_observations_v2"
+IN_FEATURE_TABLE = "flight_phase_features_v2"
+IN_RAW_WEATHER_TABLE = "flight_weather_observations_v2"
 OUT_WEATHER_TABLE = "flight_weather_features_v3"
 MERGED_TABLE = "flight_phase_features_weather_v3"
 
     
 def empty_aggregates(prefix):
+    """Return default missing-value weather aggregates for one airport phase."""
     return {
         f"{prefix}_weather_missing": 1,
         f"{prefix}_temp_missing": 1,
@@ -29,6 +37,8 @@ def empty_aggregates(prefix):
 
 
 def aggregate_weather_features(df, prefix):
+    """Aggregate raw weather observations into summary features."""
+    # Start with missing indicators enabled, overwrite them when observations exist
     out = empty_aggregates(prefix)
 
     valid_obs = df[df["elementId"].notna()].copy()
@@ -66,6 +76,7 @@ def aggregate_weather_features(df, prefix):
                 errors="coerce",
             )
             wind_dir_df = wind_dir_df.sort_values("referenceTime")
+            # Use the latest wind direction in the airport time window
             out[f"{prefix}_wind_dir_last"] = float(wind_dir_df["value"].dropna().iloc[-1])
         else:
             out[f"{prefix}_wind_dir_last"] = float(wind_dir.iloc[-1])
@@ -74,6 +85,7 @@ def aggregate_weather_features(df, prefix):
 
 
 def station_metadata(df, prefix):
+    """Extract weather station ID and distance metadata."""
     out = {
         f"{prefix}_station_id": None,
         f"{prefix}_station_distance_km": None,
@@ -92,6 +104,7 @@ def station_metadata(df, prefix):
 
 
 def weather_error(df):
+    """Collect weather retrieval errors for one flight into a single string."""
     if "weather_error" not in df.columns:
         return None
 
@@ -100,6 +113,7 @@ def weather_error(df):
 
 
 def build_weather_feature_table(raw_df):
+    """Build one row of weather features per flight from raw observations."""
     raw_df = raw_df.copy()
     raw_df["value"] = pd.to_numeric(raw_df["value"], errors="coerce")
 
@@ -119,11 +133,14 @@ def build_weather_feature_table(raw_df):
 
 
 def add_wind_direction_features(df):
+    """Encode wind direction as sine and cosine features."""
     out = df.copy()
 
+    # Build separate departure and arrival weather features for each flight
     for prefix in ["dep", "arr"]:
         dir_col = f"{prefix}_wind_dir_last"
         if dir_col in out.columns:
+            # Encode circular wind direction so 359° and 1° are close numerically
             radians = np.radians(out[dir_col])
             out[f"{prefix}_wind_dir_sin"] = np.sin(radians)
             out[f"{prefix}_wind_dir_cos"] = np.cos(radians)
@@ -135,9 +152,10 @@ def add_wind_direction_features(df):
 
 
 def build_merged_table():
+    """Merge weather features into the base flight feature table."""
     conn = sqlite3.connect(DB_PATH)
     try:
-        features_df = pd.read_sql_query(f'SELECT * FROM "{FLIGHT_TABLE}"', conn)
+        features_df = pd.read_sql_query(f'SELECT * FROM "{IN_FEATURE_TABLE}"', conn)
         weather_df = pd.read_sql_query(f'SELECT * FROM "{OUT_WEATHER_TABLE}"', conn)
 
         merged_df = features_df.merge(weather_df, on="flight_id", how="left")
@@ -153,11 +171,12 @@ def build_merged_table():
 
 
 def main():
+    """Create weather feature tables and write them to SQLite."""
     conn = sqlite3.connect(DB_PATH)
     try:
-        raw_df = pd.read_sql_query(f'SELECT * FROM "{RAW_WEATHER_TABLE}"', conn)
+        raw_df = pd.read_sql_query(f'SELECT * FROM "{IN_RAW_WEATHER_TABLE}"', conn)
         if raw_df.empty:
-            print(f"No rows found in {RAW_WEATHER_TABLE}.")
+            print(f"No rows found in {IN_RAW_WEATHER_TABLE}.")
             return
 
         weather_features = build_weather_feature_table(raw_df)

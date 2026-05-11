@@ -1,23 +1,31 @@
+"""Match OpenSky flights with Norwegian aircraft type records.
+
+This script matches domestic Norwegian OpenSky flights to rows in the
+Norwegian CSV data using departure time, airport pair, and flight number.
+The output table contains matched OpenSky flight metadata together with the
+aircraft type ICAO code from the CSV file.
+"""
+
 import re
 import sqlite3
 import pandas as pd
 from dateutil import parser
 import airportsdata
 
+
 DB_PATH = "opensky.sqlite"
-OPENSKY_TABLE = "norwegian_domestic_flights_2022"  
+IN_TABLE = "norwegian_domestic_flights_2022"  
 CSV_PATH = "norwegian_data.csv"
 OUT_TABLE = "norwegian_flights_2022_with_type"
 
-TIME_WINDOW_SECONDS = int(1.5 * 3600)  # ±1.5 hours
+TIME_WINDOW_SECONDS = int(1.5 * 3600)  
 
-# Prefixes to strip before extracting identifiers
-CSV_PREFIXES = ("DY", "D8")
+FLIGHTNUM_PREFIXES = ("DY", "D8")
 CALLSIGN_PREFIXES = ("NOZ", "NAX", "NSZ", "NRS")
 
 airports = airportsdata.load()
 
-# Build IATA -> ICAO lookup
+
 IATA_TO_ICAO = {}
 for icao, info in airports.items():
     i = info.get("iata")
@@ -26,6 +34,7 @@ for icao, info in airports.items():
 
 
 def strip_prefixes(s: str, prefixes: tuple[str, ...]) -> str:
+    """Remove known airline prefixes from a flight number or callsign."""
     if s is None:
         return ""
     s = str(s).strip().upper()
@@ -36,10 +45,7 @@ def strip_prefixes(s: str, prefixes: tuple[str, ...]) -> str:
 
 
 def tail_has_letters_after_prefix(s: str, prefixes: tuple[str, ...], tail_len: int = 5) -> bool:
-    """
-    After removing prefix, check whether the last 4-5 characters contain any letters.
-    If yes -> airport-based matching.
-    """
+    """Return whether the suffix after the airline prefix contains letters."""
     s2 = strip_prefixes(s, prefixes)
     if not s2:
         return True
@@ -49,10 +55,7 @@ def tail_has_letters_after_prefix(s: str, prefixes: tuple[str, ...], tail_len: i
 
 
 def extract_flight_number_digits(s: str, prefixes: tuple[str, ...], max_len: int = 4) -> str | None:
-    """
-    Strip prefix, then extract trailing digits (3-4 digits).
-    Returns None if not 3-4 trailing digits.
-    """
+    """Extract the trailing 3- or 4-digit flight number after removing a prefix."""
     s2 = strip_prefixes(s, prefixes)
     m = re.search(r"(\d+)$", s2)
     if not m:
@@ -66,20 +69,22 @@ def extract_flight_number_digits(s: str, prefixes: tuple[str, ...], max_len: int
 
 
 def clean_callsign(s):
+    """Strip whitespace from a callsign and preserve missing values."""
     if s is None:
         return None
     return str(s).strip()
 
 
 def parse_timestamp_to_epoch(ts_str):
-    # Assumption: UTC for naive timestamps
+    """Parse a timestamp string and return Unix epoch seconds."""
     dt = parser.parse(ts_str)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=pd.Timestamp.utcnow().tzinfo)  # UTC tzinfo
+        dt = dt.replace(tzinfo=pd.Timestamp.utcnow().tzinfo) 
     return int(dt.timestamp())
 
 
 def iata_to_icao(iata):
+    """Convert an IATA airport code to an ICAO airport code."""
     if iata is None or pd.isna(iata):
         return None
     iata = str(iata).strip().upper()
@@ -89,9 +94,9 @@ def iata_to_icao(iata):
 
 
 def main():
+    """Match Norwegian CSV rows to OpenSky flights and write the result to SQLite."""
     con = sqlite3.connect(DB_PATH)
 
-    # Load OpenSky data from SQLite 
     opensky_df = pd.read_sql_query(
         f"""
         SELECT
@@ -102,7 +107,7 @@ def main():
           estarrivalairport,
           firstseen,
           lastseen
-        FROM {OPENSKY_TABLE}
+        FROM {IN_TABLE}
         WHERE callsign IS NOT NULL
         """,
         con,
@@ -118,23 +123,21 @@ def main():
 
     opensky_df = opensky_df.sort_values("firstseen").reset_index(drop=True)
 
-    # ---- Load CSV ----
     csv_df = pd.read_csv(CSV_PATH, sep=";")
 
     CSV_COL_FLTNUM = "Displayed flight number"
     CSV_COL_TIME = "Actual departure date"
     CSV_COL_TYPE = "Aircraft type ICAO code"
 
-    # Airport columns (IATA) 
     CSV_COL_ARR_IATA = "Actual arrival airport IATA"
     CSV_COL_DEP_IATA = "Actual departure airport IATA"
 
     csv_df["flightnum"] = csv_df[CSV_COL_FLTNUM].astype(str).str.strip()
     csv_df["flightnum_num"] = csv_df["flightnum"].map(
-        lambda s: extract_flight_number_digits(s, CSV_PREFIXES)
+        lambda s: extract_flight_number_digits(s, FLIGHTNUM_PREFIXES)
     )
     csv_df["flightnum_has_letters_tail"] = csv_df["flightnum"].map(
-        lambda s: tail_has_letters_after_prefix(s, CSV_PREFIXES, tail_len=5)
+        lambda s: tail_has_letters_after_prefix(s, FLIGHTNUM_PREFIXES, tail_len=5)
     )
 
     csv_df["aircraft_type_icao"] = csv_df[CSV_COL_TYPE].astype(str).str.strip()
@@ -145,7 +148,6 @@ def main():
     csv_df["dep_icao"] = csv_df["dep_iata"].map(iata_to_icao)
     csv_df["arr_icao"] = csv_df["arr_iata"].map(iata_to_icao)
 
-    # Matching 
     matches = []
     unmatched = 0
 
@@ -158,8 +160,6 @@ def main():
         arr_icao = row["arr_icao"]
         num = row["flightnum_num"]  
 
-
-        # 1) time window candidates
         cand = opensky_df[
             (opensky_df["firstseen"] >= t0 - TIME_WINDOW_SECONDS)
             & (opensky_df["firstseen"] <= t0 + TIME_WINDOW_SECONDS)
@@ -169,7 +169,6 @@ def main():
             unmatched += 1
             continue
 
-        # Airports must match if available in CSV
         if dep_icao:
             cand = cand[cand["estdepartureairport"] == dep_icao].copy()
 
@@ -180,7 +179,6 @@ def main():
             unmatched += 1
             continue
 
-        # Calculate time diff
         cand["dt"] = (cand["firstseen"] - t0).abs()
 
        
@@ -204,7 +202,6 @@ def main():
 
         matches.append(
             {
-                # OpenSky
                 "day": int(best["day"]) if pd.notna(best["day"]) else None,
                 "csv_timestamp": row[CSV_COL_TIME],
                 "icao24": best["icao24"],
@@ -217,7 +214,6 @@ def main():
                 "firstseen": int(best["firstseen"]),
                 "lastseen": int(best["lastseen"]) if pd.notna(best["lastseen"]) else None,
                 "aircraft_type_icao": ac_type,
-                # Diagnostics
                 "time_diff_seconds": int(abs(int(best["firstseen"]) - t0)),
                 "match_rule": match_rule,
             }
@@ -228,10 +224,10 @@ def main():
     print(f"Matched rows: {len(match_df)}")
     print(f"Unmatched rows: {unmatched}")
 
-    # ---- Write output table to SQLite ----
     match_df.to_sql(OUT_TABLE, con, if_exists="replace", index=False)
 
     cur = con.cursor()
+    # Create indexes to speed up later joins, filtering, and lookups
     cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_icao24 ON {OUT_TABLE}(icao24);")
     cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_callsign ON {OUT_TABLE}(callsign);")
     cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_firstseen ON {OUT_TABLE}(firstseen);")

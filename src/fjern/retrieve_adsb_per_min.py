@@ -1,18 +1,25 @@
+"""Retrieve ADS-B state vectors for matched Norwegian flights.
+
+This script reads flight intervals from a local SQLite table, queries OpenSky
+state vectors from Trino, and stores one representative ADS-B observation per
+minute for each flight. The output table contains trajectory variables such as
+position, altitude, speed, heading, vertical rate, and squawk.
+"""
+
 import sqlite3
 from trino_client import get_trino_connection
 
+
 DB_PATH = "opensky.sqlite"
-FLIGHTS_TABLE = "norwegian_flights_2022_with_type"
+IN_TABLE = "norwegian_flights_2022_with_type"
 TRINO_STATE_TABLE = "state_vectors_data4" 
 OUT_TABLE = "test_1min"
 
-# Window
 TIME_START = 1640991600  # 2022-09-15 00:00:00
 TIME_END   = 1641510000  # 2022-10-01 00:00:00
 
-# Performance knobs
-FLIGHT_CHUNK_SIZE = 50       # flights per Trino query
-COMMIT_EVERY_CHUNKS = 10     # commit every N chunks
+FLIGHT_CHUNK_SIZE = 50       
+COMMIT_EVERY_CHUNKS = 10     
 
 
 DDL = f"""
@@ -42,9 +49,8 @@ INSERT OR IGNORE INTO {OUT_TABLE} (
 """
 
 
-# Helpers
 def trino_sql_literal(v) -> str:
-    """Safe Trino SQL literal (avoids prepared statements)."""
+    """Return a SQL-safe literal value for use in Trino VALUES clauses."""
     if v is None:
         return "NULL"
     if isinstance(v, bool):
@@ -56,11 +62,12 @@ def trino_sql_literal(v) -> str:
 
 
 def hour_floor(ts: int) -> int:
-    """Your dataset's 'hour' is a unix timestamp rounded down to the hour start."""
+    """Round a Unix timestamp down to the start of its hour."""
     return ts - (ts % 3600)
 
 
 def chunked(seq, n):
+    """Yield successive chunks of size 'n' from a sequence."""
     buf = []
     for x in seq:
         buf.append(x)
@@ -71,9 +78,11 @@ def chunked(seq, n):
         yield buf
 
 
-# Main
 def main():
+    """Retrieve per-minute ADS-B observations from Trino and store them in SQLite."""
     sqlite_conn = sqlite3.connect(DB_PATH)
+
+    # Improve SQLite write performance for large batch inserts
     sqlite_conn.execute("PRAGMA journal_mode=WAL;")
     sqlite_conn.execute("PRAGMA synchronous=NORMAL;")
     sqlite_conn.executescript(DDL)
@@ -84,7 +93,6 @@ def main():
     trino_conn = get_trino_connection()
     trino_cur = trino_conn.cursor()
 
-    # Overlap filter: include any flight that overlaps the window
     flights = list(read_cur.execute(
         f"""
         SELECT
@@ -95,7 +103,7 @@ def main():
           aircraft_type_icao,
           firstseen,
           lastseen
-        FROM {FLIGHTS_TABLE}
+        FROM {IN_TABLE}
         WHERE icao24 IS NOT NULL
           AND firstseen IS NOT NULL
           AND lastseen IS NOT NULL
@@ -110,19 +118,19 @@ def main():
 
     try:
         for flight_chunk in chunked(flights, FLIGHT_CHUNK_SIZE):
+            # Build a temporary VALUES table for this chunk of flights in the Trino query
             values_rows = []
 
             for icao24, dep, arr, callsign, ac_type, firstseen, lastseen in flight_chunk:
                 firstseen = int(firstseen)
                 lastseen = int(lastseen)
 
-                # Clamp flight interval to the window
+                # Clip each flight to the selected time window
                 start_t = max(firstseen, TIME_START)
                 end_t = min(lastseen, TIME_END)
                 if start_t >= end_t:
                     continue
 
-                # IMPORTANT: hour is unix timestamp floored to the hour
                 start_h = hour_floor(start_t)
                 end_h = hour_floor(end_t)
 
@@ -188,8 +196,7 @@ def main():
             print(f"Chunks processed: {chunk_count} | Points inserted: {total_points}")
 
         sqlite_conn.commit()
-
-        # Build indexes AFTER inserts (much faster)
+        # Create indexes to speed up later joins, filtering, and lookups
         write_cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_icao24 ON {OUT_TABLE}(icao24);")
         write_cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_postime ON {OUT_TABLE}(postime);")
         write_cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{OUT_TABLE}_icao24_postime ON {OUT_TABLE}(icao24, postime);")

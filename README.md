@@ -41,29 +41,26 @@ Fuel_estimation_machine_learning/
 ├── datatables.sqlite   # Not tracked in Git
 │
 ├── src/
-│ ├── retrieve_data/
-│ │ ├── retrieve_adsb_per_min.py
-│ │ ├── retrieve_adsb_per_min_fuel.py
+│ ├── data_retreival/
+│ │ ├── retrieve_adsb_data.py
 │ │ ├── retrieve_norwegian.py
 │ │ ├── retrieve_norwegian_domestic.py
 │ │ └── retrieve_weather_data.py
 │ │
 │ ├── preprocessing/
-│ │ ├── create_flight_id.py
-│ │ ├── match_flights_type.py
-│ │ ├── match_flights_type_fuel.py
+│ │ ├── set_flight_id.py
+│ │ ├── match_flights.py
 │ │ └── set_phases.py
 │ │
-│ ├── create_features/
-│ │ ├── create_features.py
+│ ├── feature_engineering/
+│ │ ├── create_trajectory_features.py
 │ │ ├── create_physics_features.py
 │ │ ├── create_heading_features.py
 │ │ ├── create_time_features.py
 │ │ └── create_weather_features.py
 │ │
-│ └── aviteam_ready/
+│ └── aviteam_export/
 │   ├── aviteam_ready.py
-│   ├── set_phases_aviteam.py
 │   ├── sqlite_to_csv.py
 │   └── sqlite_to_h5.py
 │
@@ -139,5 +136,5 @@ chmod +x setup.sh
 ## How to Run Files
 
 ```text
-python src/retrieve_data retrieve_norwegian_domestic.py
+python src/retrieve_data/retrieve_norwegian_domestic.py
 ```
