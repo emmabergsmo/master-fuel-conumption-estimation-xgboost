@@ -50,7 +50,7 @@ Fuel_estimation_machine_learning/
 │ ├── preprocessing/
 │ │ ├── set_flight_id.py
 │ │ ├── match_flights.py
-│ │ └── set_phases.py
+│ │ └── set_flight_phases.py
 │ │
 │ ├── feature_engineering/
 │ │ ├── create_trajectory_features.py
@@ -92,6 +92,8 @@ Fuel_estimation_machine_learning/
 ├── plotting/
 │ ├── normal_distribution.py
 │ └── normal_distribution_delta.py
+│ └── route_level_errors.py
+│ └── routes_map.py
 │
 └── outputs/    # Not tracked in Git
 ```
@@ -134,10 +136,10 @@ chmod +x setup.sh
 ```
 
 Must create an .env file to connect to Trino database, which includes:
+
 ```text
 OPENSKY_USER={username}
 ```
-
 
 ## How to Run Files
 
