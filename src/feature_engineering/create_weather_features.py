@@ -10,11 +10,11 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-DB_PATH = "opensky.sqlite"
-IN_FEATURE_TABLE = "flight_phase_features_v2"
-IN_RAW_WEATHER_TABLE = "flight_weather_observations_v2"
-OUT_WEATHER_TABLE = "flight_weather_features_v3"
-MERGED_TABLE = "flight_phase_features_weather_v3"
+DB_PATH = "data.sqlite"
+IN_FEATURE_TABLE = "flight_phase_features_physics"
+IN_RAW_WEATHER_TABLE = "flight_weather_observations"
+OUT_WEATHER_TABLE = "weather_features"
+MERGED_TABLE = "flight_phase_features_physics_weather"
 
     
 def empty_aggregates(prefix):

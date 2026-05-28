@@ -12,10 +12,10 @@ import pandas as pd
 from dateutil import parser
 import airportsdata
 
-DB_PATH = "opensky.sqlite"
+DB_PATH = "data.sqlite"
 IN_TABLE = "norwegian_domestic_flights_2022"  
 CSV_PATH = "norwegian_data.csv"
-OUT_TABLE = "norwegian_flights_2022_with_type_fuel_v2"
+OUT_TABLE = "norwegian_flights_2022_matched"
 
 TIME_WINDOW_SECONDS = int(1.5 * 3600)  
 

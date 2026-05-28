@@ -13,10 +13,10 @@ from decimal import Decimal
 # Convert Decimal values from SQLite/Trino-compatible data to floats before insertion
 sqlite3.register_adapter(Decimal, float)
 
-DB_PATH = "opensky.sqlite"
-IN_TABLE = "norwegian_flights_2022_with_type_fuel_v2"
+DB_PATH = "data.sqlite"
+IN_TABLE = "norwegian_flights_2022_matched"
 TRINO_STATE_TABLE = "state_vectors_data4" 
-OUT_TABLE = "adsb_fuel_v2"
+OUT_TABLE = "adsb_fuel"
 
 TIME_START = 1671663600  # 2022-12-21 00:00:00
 TIME_END   = 1672531200  # 2023-01-01 00:00:00
