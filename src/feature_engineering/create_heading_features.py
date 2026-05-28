@@ -10,10 +10,10 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-DB_PATH = "opensky.sqlite"
-TABLE = "adsb_fuel_v2"
-IN_FEATURE_TABLE = "flight_phase_features_weather_heading_v2"
-OUT_FEATURE_TABLE = "flight_phase_features_weather_heading_v3"
+DB_PATH = "data.sqlite"
+TABLE = "adsb_fuel"
+IN_FEATURE_TABLE = "flight_phase_features_physics_weather"
+OUT_FEATURE_TABLE = "flight_phase_features_physics_weather_heading"
 
 PHASES = {
     1: "takeoff",

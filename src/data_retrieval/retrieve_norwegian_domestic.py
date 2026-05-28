@@ -10,7 +10,7 @@ import json
 import sqlite3
 from trino_client import get_trino_connection
 
-DB_PATH = "opensky.sqlite"
+DB_PATH = "data.sqlite"
 SOURCE_TABLE = "flights_data4"
 DEST_TABLE = "norwegian_domestic_flights_2022"
 

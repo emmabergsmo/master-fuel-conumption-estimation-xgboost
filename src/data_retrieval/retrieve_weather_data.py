@@ -16,9 +16,9 @@ FROST_CLIENT_ID = "your_frost_client_id_here"  # Set this to your Frost API clie
 
 BASE_URL = "https://frost.met.no"
 
-DB_PATH = "opensky.sqlite"
-IN_TABLE = "flight_phase_features_v2"
-OUT_RAW_WEATHER_TABLE = "flight_weather_observations_v2"
+DB_PATH = "data.sqlite"
+IN_TABLE = "flight_phase_features"
+OUT_RAW_WEATHER_TABLE = "flight_weather_observations"
 
 REQUESTED_ELEMENTS = [
     "air_temperature",

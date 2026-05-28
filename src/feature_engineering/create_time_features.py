@@ -9,9 +9,9 @@ import sqlite3
 import pandas as pd
 import numpy as np
 
-DB_PATH = "opensky.sqlite"
-IN_FEATURE_TABLE = "flight_phase_features_physics_weather"
-OUT_FEATURE_TABLE = "flight_phase_features_physics_weather" # Samme tabell???? Overskriver
+DB_PATH = "data.sqlite"
+IN_FEATURE_TABLE = "flight_phase_features_physics_weather_heading"
+OUT_FEATURE_TABLE = "flight_phase_features_config3" 
 
 
 def add_time_parts_and_cyclical_features(df: pd.DataFrame) -> pd.DataFrame:

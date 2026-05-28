@@ -8,8 +8,8 @@ uses the aircraft ICAO24, callsign, and first timestamp of the segment.
 
 import sqlite3
 
-DB_PATH = "opensky.sqlite"
-TABLE = "adsb_fuel_v2"  
+DB_PATH = "data.sqlite"
+TABLE = "adsb_fuel"  
 
 GAP_SECONDS = 3600  
 

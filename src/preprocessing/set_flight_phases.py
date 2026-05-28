@@ -10,8 +10,8 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-DB_PATH = "opensky.sqlite"
-TABLE = "adsb_fuel_v2" 
+DB_PATH = "data.sqlite"
+TABLE = "adsb_fuel" 
 
 PHASE_NAMES = {
     1: "takeoff",
