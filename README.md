@@ -1,4 +1,4 @@
-# Machine Learning-Based Fuel Consumption Estimation using ADS-B Trajectory Data: A Comparison Between Data-Driven Gradient Boosting Model and Physics-Based Model 
+# Machine Learning-Based Fuel Consumption Estimation using ADS-B Trajectory Data: A Comparison Between a Data-Driven Gradient Boosting Model and a Physics-Based Model 
 
 ## Project Overview
 
