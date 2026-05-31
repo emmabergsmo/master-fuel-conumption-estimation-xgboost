@@ -1,10 +1,10 @@
-# Aviation fuel estimation using machine learning and AviTEAM
+# Machine Learning-Based Fuel Consumption Estimation using ADS-B Trajectory Data: A Comparison Between Data-Driven Gradient Boosting Model and Physics-Based Model 
 
 ## Project Overview
 
 This repository contains the code developed as part of the master’s thesis project by Emma Bergsmo and Thea Remman Paulse at the Norwegian University of Science and Technology (NTNU).
 
-The aim of the project is to estimate aircraft fuel consumption using machine learning models based on ADS-B trajectory data, recorded fuel consumption, and engineered features. The results are then compared to AviTEAM, a physics-based fuel estimation model. The project follows a complete data pipeline, from data retrieval and preprocessing to feature generation, model training, evaluation, and visualization of results.
+The aim of the project is to estimate aircraft fuel consumption using machine learning models based on ADS-B trajectory data, recorded fuel consumption, and engineered features. The results are then compared to AviTeam, a physics-based fuel estimation model. The project follows a complete data pipeline, from data retrieval and preprocessing to feature generation, model training, evaluation, and visualization of results.
 
 The is based on ADS-B data from the OpenSky Network and fuel records from the Norwegian Air Shuttle. XGBoost models are trained and evaluated for full-flight fuel consumption as well as for individual flight phases: takeoff, climb, cruise, descent, and landing.
 
@@ -25,7 +25,7 @@ Since private recorded fuel data from Norwegian Air Shuttle is used, the input d
 - `src/retrieve_data/`: scripts for retrieving data from OpenSky and Met Frost API
 - `src/preprocessing/`: scripts for matching flights, assigning flight IDs, and identifying flight phases
 - `src/create_features/`: scripts for creating model-ready feature tables, including physics, weather, heading, and time features
-- `src/aviteam_ready/`: scripts for preparing and formatting data to be compatible with AviTEAM
+- `src/aviteam_ready/`: scripts for preparing and formatting data to be compatible with AviTeam
 - `notebooks/`: XGBoost models for different flight phases and feature sets
 - `plotting/`: scripts used to generate thesis plots and figures
 - `outputs/`: generated figures, models, predictions, and tables
@@ -111,14 +111,14 @@ Machine learning:
 7. Train XGBoost models in the notebooks
 8. Generate plots and output files
 
-AviTEAM:
+AviTeam:
 
 1. Retrieve domestic Norwegian Air Shuttle flights from OpenSky
 2. Match OpenSky data with Norwegian Air Shuttle dataset
 3. Retrieve ADS-B trajectory data for matched flights
 4. Create unique flight identifier
 5. Assign flight phases
-6. Make ADS-B dataset compatible with AviTEAM
+6. Make ADS-B dataset compatible with AviTeam
 7. Save and export dataset as HDF5
 
 ## Outputs
