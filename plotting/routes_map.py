@@ -2,7 +2,6 @@ import os
 import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import matplotlib.patheffects as pe
 from matplotlib.patches import Polygon
 import cartopy.crs as ccrs
@@ -118,7 +117,7 @@ ax.text(
 )
 
 left_blade = Polygon(
-    [(0.085, 0.915), (0.065, 0.855), (0.085, 0.870)],
+    [(0.085, 0.915), (0.066, 0.875), (0.085, 0.885)],
     closed=True,
     transform=ax.transAxes,
     facecolor="white",
@@ -127,7 +126,7 @@ left_blade = Polygon(
     zorder=4,
 )
 right_blade = Polygon(
-    [(0.085, 0.915), (0.085, 0.870), (0.105, 0.855)],
+    [(0.085, 0.915), (0.085, 0.885), (0.104, 0.875)],
     closed=True,
     transform=ax.transAxes,
     facecolor="#1f2a44",
@@ -156,15 +155,18 @@ route_counts[["estdepartureairport", "estarrivalairport"]] = pd.DataFrame(
 
 route_counts = route_counts.sort_values("count")
 max_count = route_counts["count"].max()
-
-n_routes = len(route_counts)
-base_colors = list(mcolors.TABLEAU_COLORS.values()) + [
-    mcolors.CSS4_COLORS[c] for c in [
-        "crimson", "deeppink", "darkorange", "gold", "limegreen",
-        "turquoise", "deepskyblue", "dodgerblue", "blueviolet", "magenta"
-    ]
+route_colors = [
+    "#4472C4",
+    "#70AD47",
+    "#ED7D31",
+    "#7030A0",
+    "#E8AE00",
+    "#D9534F",
+    "#5BC0DE",
+    "#1D4F17",
+    "#8B5A2B",
+    "#E377C2",
 ]
-cmap = mcolors.ListedColormap(base_colors, name="bright_routes")
 
 
 # DRAW ROUTES
@@ -182,7 +184,7 @@ for i, (_, row) in enumerate(route_counts.iterrows()):
     lon2 = airports[arr]["lon"]
 
     weight = count / max_count
-    color = cmap(i % cmap.N)
+    color = route_colors[i % len(route_colors)]
 
     ax.plot(
         [lon1, lon2],
