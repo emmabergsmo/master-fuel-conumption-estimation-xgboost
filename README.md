@@ -1,4 +1,5 @@
-# Aviation fuel estimation using machine learning and AviTEAM
+# Phase-Level Aviation Fuel Consumption Estimation Using ADS-B Trjectory Data
+## An XGBoost Modelling Framework Benchmarked Against a Physics-Based Approach
 
 ## Project Overview
 
@@ -6,23 +7,23 @@ This repository contains the code developed as part of the master’s thesis pro
 
 The aim of the project is to estimate aircraft fuel consumption using machine learning models based on ADS-B trajectory data, recorded fuel consumption, and engineered features. The results are then compared to AviTEAM, a physics-based fuel estimation model. The project follows a complete data pipeline, from data retrieval and preprocessing to feature generation, model training, evaluation, and visualization of results.
 
-The is based on ADS-B data from the OpenSky Network and fuel records from the Norwegian Air Shuttle. XGBoost models are trained and evaluated for full-flight fuel consumption as well as for individual flight phases: takeoff, climb, cruise, descent, and landing.
+The is based on ADS-B data from the OpenSky Network and fuel records from the Norwegian Air Shuttle ASA. XGBoost models are trained and evaluated for full-flight fuel consumption as well as for individual flight phases: takeoff, climb, cruise, descent, and landing.
 
 ## Data
 
 - Opensky Network Trino Database
   - `flights_data4`
   - `state_vectors_data4`
-- Norwegian Air Shuttle recorded fuel consumption in 2022
-- MET Frost API
+- Norwegian Air Shuttle ASA recorded fuel consumption in 2022
+- Norwegian Meteorological Institute Frost API
 
 ## Data Privacy
 
-Since private recorded fuel data from Norwegian Air Shuttle is used, the input data is excluded from Git.
+Since private recorded fuel data from Norwegian Air Shuttle ASA is used, the input data is excluded from Git.
 
 ## Repository Structure
 
-- `src/retrieve_data/`: scripts for retrieving data from OpenSky and Met Frost API
+- `src/retrieve_data/`: scripts for retrieving data from OpenSky and Frost API
 - `src/preprocessing/`: scripts for matching flights, assigning flight IDs, and identifying flight phases
 - `src/create_features/`: scripts for creating model-ready feature tables, including physics, weather, heading, and time features
 - `src/aviteam_ready/`: scripts for preparing and formatting data to be compatible with AviTEAM
@@ -37,7 +38,7 @@ Fuel_estimation_machine_learning/
 ├── setup.sh
 ├── .gitignore
 ├── norwegian_data.csv  # Not tracked in Git
-├── datatables.sqlite   # Not tracked in Git
+├── data.sqlite   # Not tracked in Git
 │
 ├── src/
 │ ├── data_retreival/
@@ -102,8 +103,8 @@ Fuel_estimation_machine_learning/
 
 Machine learning:
 
-1. Retrieve domestic Norwegian Air Shuttle flights from OpenSky
-2. Match OpenSky data with Norwegian Air Shuttle dataset
+1. Retrieve domestic Norwegian Air Shuttle ASA flights from OpenSky
+2. Match OpenSky data with Norwegian Air Shuttle ASA dataset
 3. Retrieve ADS-B trajectory data for matched flights
 4. Create unique flight identifier
 5. Assign flight phases
@@ -113,8 +114,8 @@ Machine learning:
 
 AviTEAM:
 
-1. Retrieve domestic Norwegian Air Shuttle flights from OpenSky
-2. Match OpenSky data with Norwegian Air Shuttle dataset
+1. Retrieve domestic Norwegian Air Shuttle ASA flights from OpenSky
+2. Match OpenSky data with Norwegian Air Shuttle ASA dataset
 3. Retrieve ADS-B trajectory data for matched flights
 4. Create unique flight identifier
 5. Assign flight phases
@@ -123,8 +124,8 @@ AviTEAM:
 
 ## Outputs
 
-- Data tables written to datatables.sqlite
-- Feature tables written to datatables.sqlite
+- Data tables written to data.sqlite
+- Feature tables written data.sqlite
 - XGBoost model performnace presented inside notebooks
 - Plotting results saved in outputs folder
 
