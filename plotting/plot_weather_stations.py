@@ -1,20 +1,16 @@
-import os
 import matplotlib.pyplot as plt
+import numpy as np
 import matplotlib.patheffects as pe
 from matplotlib.patches import Polygon
 import cartopy.crs as ccrs
 import cartopy.io.img_tiles as cimgt
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
+from plot_style import (
+    save_figure,
+)
 
-# -------------------------
-# CONFIG
-# -------------------------
-OUTDIR = "outputs"
-os.makedirs(OUTDIR, exist_ok=True)
 
-# -------------------------
-# STATION DATA
-# -------------------------
+# Station data
 stations = [
     {"id": "SN4781", "name": "Gardermoen Sør",    "lat": 60.1883, "lon": 11.0743},
     {"id": "SN4780", "name": "Gardermoen",         "lat": 60.2065, "lon": 11.0802},
@@ -23,9 +19,7 @@ stations = [
     {"id": "SN4725", "name": "E16 Gardermoen",     "lat": 60.1677, "lon": 11.1165},
 ]
 
-# -------------------------
-# TILE BACKGROUND (CartoDB Positron)
-# -------------------------
+# Tile background
 class Positron(cimgt.GoogleWTS):
     def _image_url(self, tile):
         x, y, z = tile
@@ -33,9 +27,7 @@ class Positron(cimgt.GoogleWTS):
 
 tiles = Positron()
 
-# -------------------------
-# CREATE MAP
-# -------------------------
+# Create map
 fig = plt.figure(figsize=(10, 10))
 ax = plt.axes(projection=tiles.crs)
 
@@ -59,9 +51,7 @@ gl.ylabel_style = {"size": 12}
 ax.xaxis.set_major_formatter(LongitudeFormatter(number_format=".2f", degree_symbol="°"))
 ax.yaxis.set_major_formatter(LatitudeFormatter(number_format=".2f", degree_symbol="°"))
 
-# -------------------------
-# NORTH ARROW
-# -------------------------
+# North arrow
 ax.text(
     0.085, 0.955, "N",
     transform=ax.transAxes,
@@ -95,9 +85,7 @@ right_blade = Polygon(
 ax.add_patch(left_blade)
 ax.add_patch(right_blade)
 
-# -------------------------
-# DRAW STATIONS
-# -------------------------
+# Draw stations
 colors = ["#ED7D31", "#70AD47", "#4472C4", "#7030A0", "#E8AE00"]
 
 label_offsets = {
@@ -143,11 +131,7 @@ for station, color in zip(stations, colors):
         path_effects=[pe.withStroke(linewidth=2.6, foreground="white")],
     )
 
-# -------------------------
-# SCALE BAR
-# ~2 km bar in bottom-left, matching map style
-# -------------------------
-import numpy as np
+# Scale bar
 
 # Position in axes coordinates
 bar_x0 = 0.05
@@ -173,7 +157,7 @@ target_km = round(dist_km * 2) / 2
 scale_factor = target_km / dist_km
 bar_ax_width_scaled = bar_ax_width * scale_factor
 
-# Draw the bar (two filled halves for classic scale bar look)
+# Draw the bar 
 mid_x = bar_x0 + bar_ax_width_scaled / 2
 half = bar_ax_width_scaled / 2
 bar_height = 0.012
@@ -190,7 +174,7 @@ for i, (x_start, fc) in enumerate([(bar_x0, "#1f2a44"), (mid_x, "white")]):
     )
     ax.add_patch(rect)
 
-# Labels: 0, half, full
+# Labels
 for label, x_pos in [
     ("0", bar_x0),
     (f"{target_km/2:.1g} km", mid_x),
@@ -209,12 +193,8 @@ for label, x_pos in [
         zorder=5,
     )
 
-# -------------------------
-# FINALIZE
-# -------------------------
+# Save figure
 plt.tight_layout()
 
-out_path = os.path.join(OUTDIR, "gardermoen_stations_map.png")
-plt.savefig(out_path, dpi=300)
-plt.close()
+out_path = save_figure(fig, "gardermoen_stations_map.png", pad_inches=0.05)
 print(f"Saved: {out_path}")
