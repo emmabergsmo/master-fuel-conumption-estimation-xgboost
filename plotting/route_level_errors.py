@@ -2,19 +2,14 @@ from pathlib import Path
 
 import pandas as pd
 
-
 BASE_DIR = Path(__file__).resolve().parents[1]
-
 PHASES = ["takeoff", "climb", "cruise", "descent", "landing"]
 
 CONFIG_FILES = {
-    "Config 1": BASE_DIR / "notebooks/xg_boost/csv_files/route_actual_100_predicted_vs_actual_percent.csv",
-    "Config 2": BASE_DIR / "notebooks/xg_boost_physics/csv_files/route_actual_100_predicted_vs_actual_percent_config2.csv",
-    "Config 3": BASE_DIR / "notebooks/xg_boost_physics_weather_time/csv_files/route_actual_100_predicted_vs_actual_percent_config3.csv",
+    "Config 1": BASE_DIR / "notebooks/xgboost/csv_files/route_actual_100_predicted_vs_actual_percent.csv",
+    "Config 2": BASE_DIR / "notebooks/xgboost_physics/csv_files/route_actual_100_predicted_vs_actual_percent_config2.csv",
+    "Config 3": BASE_DIR / "notebooks/xgboost_weather_time/csv_files/route_actual_100_predicted_vs_actual_percent_config3.csv",
 }
-
-OUTPUT_DIR = BASE_DIR / "outputs"
-OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 def add_route_errors(df: pd.DataFrame) -> pd.DataFrame:
@@ -42,8 +37,6 @@ def summarize_config(config_name: str, path: Path) -> dict:
 
     df = add_route_errors(pd.read_csv(path))
 
-
-
     return {
         "configuration": config_name,
         "routes": len(df),
@@ -60,7 +53,7 @@ def main() -> None:
     )
 
     print(summary.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
- 
+
 
 if __name__ == "__main__":
     main()

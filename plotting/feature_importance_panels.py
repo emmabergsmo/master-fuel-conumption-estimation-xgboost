@@ -2,16 +2,17 @@ import json
 import re
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
 
+from plot_style import (
+    PHASES,
+    make_phase_panel_figure,
+    phase_label,
+    save_figure,
+)
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = BASE_DIR / "outputs"
-OUTPUT_DIR.mkdir(exist_ok=True)
 
-PHASES = ["takeoff", "climb", "cruise", "descent", "landing"]
-PHASE_LABELS = {"takeoff": "Take-off"}
 TOP_N = 15
 
 CONFIGS = {
@@ -80,15 +81,7 @@ def shorten_feature_name(feature: str, phase: str) -> str:
 
 
 def plot_config_panel(config_name: str, config: dict) -> Path:
-    fig = plt.figure(figsize=(13, 13))
-    gs = fig.add_gridspec(3, 4)
-    axes = [
-        fig.add_subplot(gs[0, 0:2]),
-        fig.add_subplot(gs[0, 2:4]),
-        fig.add_subplot(gs[1, 0:2]),
-        fig.add_subplot(gs[1, 2:4]),
-        fig.add_subplot(gs[2, 1:3]),
-    ]
+    fig, axes = make_phase_panel_figure(figsize=(13, 13))
 
     for i, phase in enumerate(PHASES):
         ax = axes[i]
@@ -96,17 +89,12 @@ def plot_config_panel(config_name: str, config: dict) -> Path:
         labels = [shorten_feature_name(feature, phase) for feature in imp.index]
 
         ax.barh(labels[::-1], imp.values[::-1])
-        phase_label = PHASE_LABELS.get(phase, phase.capitalize())
-        ax.set_title(f"{phase_label} model", fontsize=14)
+        ax.set_title(f"{phase_label(phase)} model", fontsize=14)
         ax.tick_params(axis="y", labelsize=14)
         ax.tick_params(axis="x", labelsize=14)
 
     fig.tight_layout(rect=[0.12, 0.03, 1, 0.95])
-
-    outpath = OUTPUT_DIR / f"feature_importance_panel_{config_name}.png"
-    fig.savefig(outpath, dpi=300, bbox_inches="tight", pad_inches=0.25)
-    plt.close(fig)
-    return outpath
+    return save_figure(fig, f"feature_importance_panel_{config_name}.png", pad_inches=0.25)
 
 
 def main() -> None:

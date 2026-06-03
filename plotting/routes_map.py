@@ -1,5 +1,5 @@
-import os
 import sqlite3
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
@@ -10,18 +10,16 @@ import cartopy.io.img_tiles as cimgt
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 
 import airportsdata
+from plot_style import (
+    BASE_DIR,
+    save_figure,
+)
 
-# -------------------------
-# CONFIG
-# -------------------------
-DB_PATH = "opensky.sqlite"
-TABLE_NAME = "flight_phase_features_v2"
-
-OUTDIR = "outputs"
-os.makedirs(OUTDIR, exist_ok=True)
+DB_PATH = BASE_DIR / "data.sqlite"
+TABLE_NAME = "flight_phase_features"
 
 
-# LOAD DATA
+# Load data
 con = sqlite3.connect(DB_PATH)
 
 df = pd.read_sql_query(f"""
@@ -33,7 +31,7 @@ AND estarrivalairport IS NOT NULL
 
 con.close()
 
-# PRINT AIRPORT COUNTS
+# Print airport counts
 total_departures = len(df)
 total_arrivals = len(df)
 
@@ -56,7 +54,6 @@ print(f"Total arrivals: {total_arrivals}")
 print("\nArrivals and departures by airport:")
 print(airport_counts.to_string())
 
-# AGGREGATE ROUTES
 route_counts = (
     df.groupby(["estdepartureairport", "estarrivalairport"])
       .size()
@@ -64,11 +61,11 @@ route_counts = (
 )
 
 
-# LOAD AIRPORT DATA
+# Load airport metadata
 airports = airportsdata.load()
 
 
-# TILE BACKGROUND (CartoDB Positron)
+# Tile background
 
 class Positron(cimgt.GoogleWTS):
     def _image_url(self, tile):
@@ -77,7 +74,7 @@ class Positron(cimgt.GoogleWTS):
 
 tiles = Positron()
 
-# CREATE MAP
+# Create map
 fig = plt.figure(figsize=(10, 10))
 ax = plt.axes(projection=tiles.crs)
 
@@ -168,8 +165,7 @@ route_colors = [
     "#E377C2",
 ]
 
-
-# DRAW ROUTES
+# Draw routes
 for i, (_, row) in enumerate(route_counts.iterrows()):
     dep = row["estdepartureairport"]
     arr = row["estarrivalairport"]
@@ -196,7 +192,7 @@ for i, (_, row) in enumerate(route_counts.iterrows()):
         zorder=2
     )
 
-# DRAW AIRPORTS
+# Draw airports
 used_airports = set(route_counts["estdepartureairport"]) | set(route_counts["estarrivalairport"])
 
 for icao in used_airports:
@@ -227,12 +223,8 @@ for icao in used_airports:
     )
 
 
-# FINALIZE
 plt.tight_layout()
 
 # Save
-out_path = os.path.join(OUTDIR, "norway_route_map.png")
-plt.savefig(out_path, dpi=300)
-
-plt.close()
+out_path = save_figure(fig, "norway_route_map.png", pad_inches=0.05)
 print(f"Saved: {out_path}")
