@@ -1,4 +1,5 @@
 # Phase-Level Aviation Fuel Consumption Estimation Using ADS-B Trjectory Data
+
 ## An XGBoost Modelling Framework Benchmarked Against a Physics-Based Approach
 
 ## Project Overview
@@ -95,6 +96,10 @@ Fuel_estimation_machine_learning/
 │ └── normal_distribution_delta.py
 │ └── route_level_errors.py
 │ └── routes_map.py
+│ └── weather_stations_map.py
+│ └── plot_style.py
+│ └── feature_importance_panels.py
+│ └── phase_regression_panels.py
 │
 └── outputs/    # Not tracked in Git
 ```
