@@ -1,4 +1,4 @@
-# Phase-Level Aviation Fuel Consumption Estimation Using ADS-B Trjectory Data
+# Phase-Level Aviation Fuel Consumption Estimation Using ADS-B Trajectory Data
 
 ## An XGBoost Modelling Framework Benchmarked Against a Physics-Based Approach
 
