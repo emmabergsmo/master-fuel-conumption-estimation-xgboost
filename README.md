@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-This repository contains the code developed as part of the master’s thesis project by Emma Bergsmo and Thea Remman Paulse at the Norwegian University of Science and Technology (NTNU).
+This repository contains the code developed as part of the master’s thesis project by Emma Bergsmo and Thea Remman Paulsen at the Norwegian University of Science and Technology (NTNU).
 
 The aim of the project is to estimate aircraft fuel consumption using machine learning models based on ADS-B trajectory data, recorded fuel consumption, and engineered features. The results are then compared to AviTeam, a physics-based fuel estimation model. The project follows a complete data pipeline, from data retrieval and preprocessing to feature generation, model training, evaluation, and visualisation of results.
 
